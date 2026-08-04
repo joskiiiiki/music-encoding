@@ -105,6 +105,8 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--epochs", default=100, type=int)
     parser.add_argument("--workers", default=4, type=int)
     parser.add_argument("--batch-size", default=128, type=int)
+    parser.add_argument("--prefetch", default=2, type=int)
+
     args = vars(parser.parse_args(sys.argv[1:]))
     resume: pathlib.Path | None = args["resume"]
     epochs: int = args["epochs"]
@@ -116,15 +118,15 @@ if __name__ == "__main__":
     )
 
     base_ds = datasets.load_dataset("benjamin-paine/free-music-archive-small")["train"]
-    ds = FMAPairDataset(base_ds)
+    ds = FMAPairDataset(base_ds, cache_dir="./cached")
     dl = tc.utils.data.DataLoader(
         ds,
-        batch_size=args["batch-size"],
+        batch_size=args["batch_size"],
         shuffle=True,
         num_workers=args["workers"],
         collate_fn=collate_pairs,
         drop_last=True,
-        prefetch_factor=4
+        prefetch_factor=args["prefetch"]
     )
     model = SiameseEncoderBT(proj_dims=2048).to(device)
     model.forward = tc.compile(model.forward)
