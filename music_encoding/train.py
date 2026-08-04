@@ -47,11 +47,24 @@ def train(
         if is_new_file:
             csv_writer.writerow(["epoch", "lr", "loss", "on_diag", "off_diag"])
 
+    print(
+        f"[train] starting: epochs={start_epoch}..{start_epoch + epochs - 1}, "
+        f"batches/epoch={len(dl)}, device={device}, "
+        f"checkpoints -> {checkpoint_path}",
+        flush=True,
+    )
+
     try:
         for epoch in range(start_epoch, start_epoch + epochs):
             model.train()
             total_loss = 0.0
-            for wav_a, wav_b in dl:
+            lr = optimizer.param_groups[0]["lr"]
+            print(
+                f"[train] epoch {epoch}/{start_epoch + epochs - 1} "
+                f"(lr={lr}) ...",
+                flush=True,
+            )
+            for batch_idx, (wav_a, wav_b) in enumerate(dl):
                 wav_a = wav_a.to(device)
                 wav_b = wav_b.to(device)
                 optimizer.zero_grad()
@@ -61,6 +74,12 @@ def train(
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
+                if batch_idx % 50 == 0:
+                    print(
+                        f"[train] epoch {epoch} batch {batch_idx}/{len(dl)} "
+                        f"loss={loss.item():.4f}",
+                        flush=True,
+                    )
 
             avg_loss = total_loss / len(dl)
             scheduler.step(avg_loss)
