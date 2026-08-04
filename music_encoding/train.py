@@ -112,15 +112,32 @@ if __name__ == "__main__":
     resume: pathlib.Path | None = args["resume"]
     epochs: int = args["epochs"]
 
+    print(f"[init] device={device} resume={resume} epochs={epochs}", flush=True)
+
+    print("[init] loading checkpoint...", flush=True)
     checkpoint = (
         tc.load(resume, map_location=device)
         if resume is not None and resume.is_file()
         else None
     )
+    print(f"[init] checkpoint loaded: {resume if checkpoint else 'none'}", flush=True)
 
+    print("[init] loading base dataset...", flush=True)
     base_ds = datasets.load_dataset("benjamin-paine/free-music-archive-small")["train"]
+    print(f"[init] base dataset loaded: {len(base_ds)} tracks", flush=True)
+
+    print("[init] creating augmenter...", flush=True)
     augmenter = AudioAugmenter()
+
+    print("[init] building pair dataset (caching resampled tracks)...", flush=True)
     ds = FMAPairDataset(base_ds, cache_dir="./cached", augmenter=augmenter)
+    print(f"[init] pair dataset ready: {len(ds)} pairs", flush=True)
+
+    print(
+        f"[init] building dataloader (batch={args['batch_size']}, "
+        f"workers={args['workers']}, prefetch={args['prefetch']})...",
+        flush=True,
+    )
     dl = tc.utils.data.DataLoader(
         ds,
         batch_size=args["batch_size"],
@@ -130,20 +147,29 @@ if __name__ == "__main__":
         drop_last=True,
         prefetch_factor=args["prefetch"]
     )
+
+    print("[init] building model...", flush=True)
     model = SiameseEncoderBT(proj_dims=2048).to(device)
+    print("[init] compiling model forward pass (this can take a while)...", flush=True)
     model.forward = tc.compile(model.forward)
+    print("[init] model compiled", flush=True)
+
     optimizer = tc.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = tc.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.1, patience=10
     )
     start_epoch: int = 0
     if checkpoint:
+        print("[init] restoring state from checkpoint...", flush=True)
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
+        print(f"[init] restored, resuming at epoch {start_epoch}", flush=True)
 
+    print("[init] compiling loss function (this can take a while)...", flush=True)
     loss_fn = tc.compile(BarlowTwinsLoss(lambd=4.9e-4))
+    print("[init] loss compiled", flush=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = pathlib.Path(f"train_log_{timestamp}.csv")
