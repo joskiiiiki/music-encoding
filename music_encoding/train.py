@@ -1,4 +1,4 @@
-from music_encoding.augmenter import AudioAugmenter
+from music_encoding.augmenter import AudioAugmenter, BatchAudioAugmenter
 import os
 from typing import cast
 from importlib.resources import path
@@ -23,6 +23,7 @@ def train(
     optimizer: Optimizer,
     scheduler: tc.optim.lr_scheduler.ReduceLROnPlateau,
     loss_fn: Callable[[tc.Tensor, tc.Tensor], tuple[tc.Tensor, tc.Tensor, tc.Tensor]],
+    augmenter: BatchAudioAugmenter,
     epochs: int = 300,
     device: str = "cuda",
     start_epoch: int = 0,
@@ -65,9 +66,14 @@ def train(
                 flush=True,
             )
             for batch_idx, (wav_a, wav_b) in enumerate(dl):
+                print(f"[train] batch {batch_idx}")
                 wav_a = wav_a.to(device)
                 wav_b = wav_b.to(device)
+
+                wav_a = augmenter(wav_a)
+                wav_b = augmenter(wav_b)
                 optimizer.zero_grad()
+
                 with tc.autocast(device_type="cuda", dtype=tc.bfloat16):
                     emb_a, emb_b, z_a, z_b = model.forward_pair(wav_a, wav_b)
                     loss, on_diag, off_diag = loss_fn(z_a, z_b)
@@ -126,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument("--workers", default=4, type=int)
     parser.add_argument("--batch-size", default=128, type=int)
     parser.add_argument("--prefetch", default=2, type=int)
+    parser.add_argument("--cache-dir", default=None, type=pathlib.Path)
 
     args = vars(parser.parse_args(sys.argv[1:]))
     resume: pathlib.Path | None = args["resume"]
@@ -146,10 +153,10 @@ if __name__ == "__main__":
     print(f"[init] base dataset loaded: {len(base_ds)} tracks", flush=True)
 
     print("[init] creating augmenter...", flush=True)
-    augmenter = AudioAugmenter()
+    augmenter = BatchAudioAugmenter()
 
     print("[init] building pair dataset (caching resampled tracks)...", flush=True)
-    ds = FMAPairDataset(base_ds, cache_dir="./cached", augmenter=augmenter)
+    ds = FMAPairDataset(base_ds, cache_dir=args["cache_dir"])
     print(f"[init] pair dataset ready: {len(ds)} pairs", flush=True)
 
     print(
@@ -203,4 +210,5 @@ if __name__ == "__main__":
         epochs=epochs,
         start_epoch=start_epoch,
         log_path=log_path,
+        augmenter=augmenter
     )

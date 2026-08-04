@@ -1,3 +1,4 @@
+import time
 import os
 import pathlib
 import random
@@ -66,7 +67,6 @@ class FMAPairDataset(tc.utils.data.Dataset):
         target_sr: int = DEFAULT_TGT_SR,
         min_offset_sec: float = DEFAULT_MIN_OFF_S,
         cache_dir: str | os.PathLike | None = None,
-        augmenter: AudioAugmenter | None = None,
 
     ) -> None:
         self.ds = dataset
@@ -74,7 +74,6 @@ class FMAPairDataset(tc.utils.data.Dataset):
         self.min_offset = int(min_offset_sec * target_sr)
         self.target_sr = target_sr
         self.cache_dir = None if cache_dir is None else pathlib.Path(cache_dir)
-        self.augmenter = augmenter
 
         if self.cache_dir is not None:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -104,8 +103,6 @@ class FMAPairDataset(tc.utils.data.Dataset):
         wav = self._load_resampled(index)
         win_a, start_a = self._rand_window(wav)
         win_b, _ = self._rand_window(wav, exclude=start_a)
-        if self.augmenter:
-            return self.augmenter(win_a), self.augmenter(win_b)
         return win_a, win_b
 
 
