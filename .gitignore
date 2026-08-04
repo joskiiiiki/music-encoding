@@ -228,3 +228,4 @@ training_*.csv
 *.pt
 checkpoints/
 
+*.wav
