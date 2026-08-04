@@ -1,18 +1,17 @@
-from music_encoding.augmenter import AudioAugmenter, BatchAudioAugmenter
+import argparse
+import csv
 import os
-from typing import cast
-from importlib.resources import path
 import pathlib
 import sys
-import csv
-import argparse
-from datetime import datetime
 from collections.abc import Callable
-from torch.utils.data import DataLoader
-from torch.optim import Optimizer
+from datetime import datetime
+
 import datasets
-from torch import nn
 import torch as tc
+from torch.optim import Optimizer
+from torch.utils.data import DataLoader
+
+from music_encoding.augmenter import AudioAugmenter
 from music_encoding.model import BarlowTwinsLoss, SiameseEncoderBT
 from music_encoding.twin_dataset import FMAPairDataset, collate_pairs
 
@@ -23,7 +22,6 @@ def train(
     optimizer: Optimizer,
     scheduler: tc.optim.lr_scheduler.ReduceLROnPlateau,
     loss_fn: Callable[[tc.Tensor, tc.Tensor], tuple[tc.Tensor, tc.Tensor, tc.Tensor]],
-    augmenter: BatchAudioAugmenter,
     epochs: int = 300,
     device: str = "cuda",
     start_epoch: int = 0,
@@ -61,8 +59,7 @@ def train(
             total_loss = 0.0
             lr = optimizer.param_groups[0]["lr"]
             print(
-                f"[train] epoch {epoch}/{start_epoch + epochs - 1} "
-                f"(lr={lr}) ...",
+                f"[train] epoch {epoch}/{start_epoch + epochs - 1} (lr={lr}) ...",
                 flush=True,
             )
             for batch_idx, (wav_a, wav_b) in enumerate(dl):
@@ -70,8 +67,6 @@ def train(
                 wav_a = wav_a.to(device)
                 wav_b = wav_b.to(device)
 
-                wav_a = augmenter(wav_a)
-                wav_b = augmenter(wav_b)
                 optimizer.zero_grad()
 
                 with tc.autocast(device_type="cuda", dtype=tc.bfloat16):
@@ -153,10 +148,14 @@ if __name__ == "__main__":
     print(f"[init] base dataset loaded: {len(base_ds)} tracks", flush=True)
 
     print("[init] creating augmenter...", flush=True)
-    augmenter = BatchAudioAugmenter()
+    augmenter = AudioAugmenter()
 
     print("[init] building pair dataset (caching resampled tracks)...", flush=True)
-    ds = FMAPairDataset(base_ds, cache_dir=args["cache_dir"])
+    ds = FMAPairDataset(
+        base_ds,
+        cache_dir=args["cache_dir"],
+        augmenter=augmenter,
+    )
     print(f"[init] pair dataset ready: {len(ds)} pairs", flush=True)
 
     print(
@@ -171,7 +170,7 @@ if __name__ == "__main__":
         num_workers=args["workers"],
         collate_fn=collate_pairs,
         drop_last=True,
-        prefetch_factor=args["prefetch"]
+        prefetch_factor=args["prefetch"],
     )
 
     print("[init] building model...", flush=True)
@@ -210,5 +209,4 @@ if __name__ == "__main__":
         epochs=epochs,
         start_epoch=start_epoch,
         log_path=log_path,
-        augmenter=augmenter
     )
