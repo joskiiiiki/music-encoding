@@ -103,6 +103,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--resume", default=None, type=pathlib.Path)
     parser.add_argument("-e", "--epochs", default=100, type=int)
+    parser.add_argument("--workers", default=4, type=int)
+    parser.add_argument("--batch-size", default=128, type=int)
     args = vars(parser.parse_args(sys.argv[1:]))
     resume: pathlib.Path | None = args["resume"]
     epochs: int = args["epochs"]
@@ -117,11 +119,12 @@ if __name__ == "__main__":
     ds = FMAPairDataset(base_ds)
     dl = tc.utils.data.DataLoader(
         ds,
-        batch_size=128,
+        batch_size=args["batch-size"],
         shuffle=True,
-        num_workers=4,
+        num_workers=args["workers"],
         collate_fn=collate_pairs,
         drop_last=True,
+        prefetch_factor=4
     )
     model = SiameseEncoderBT(proj_dims=2048).to(device)
     model.forward = tc.compile(model.forward)
@@ -131,10 +134,10 @@ if __name__ == "__main__":
     )
     start_epoch: int = 0
     if checkpoint:
-        model.load_state_dict(checkpoint)  # ["model_state_dict"])
-        # optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        # scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        start_epoch = 101  # checkpoint["epoch"] + 1
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        start_epoch = checkpoint["epoch"] + 1
 
     loss_fn = tc.compile(BarlowTwinsLoss(lambd=4.9e-4))
 

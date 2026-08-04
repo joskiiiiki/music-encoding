@@ -126,7 +126,7 @@ def main() -> None:
     print("[main] computing cosine similarity matrix")
     sim = test_norm @ train_norm.T  # (N_test, N_train)
 
-    k = 10
+    k = 50
     print(f"[main] computing top-{k} neighbors")
     topk_sim, topk_idx = sim.topk(k, dim=1)  # topk_idx: positions WITHIN train_embs
 
