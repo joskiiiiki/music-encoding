@@ -1,4 +1,3 @@
-from yarl import cache_clear
 import os
 import pathlib
 import random
@@ -6,9 +5,10 @@ import random
 import datasets
 import torch as tc
 import torchaudio as ta
-from torchcodec.decoders import AudioDecoder
-from torchcodec import AudioSamples
 from torch import nn
+from torchcodec.decoders import AudioDecoder
+
+from music_encoding.augmenter import AudioAugmenter
 
 DEFAULT_TGT_SR = 22050
 DEFAULT_WIN_LEN_S = 5
@@ -54,11 +54,7 @@ def load_resampled_cached(ds, idx, tgt_sr, cache_dir: pathlib.Path):
         return tc.load(cache_path)
     decoder = ds[idx]["audio"]
     samples = decoder.get_all_samples()
-    wav = samples.data
-    if wav.ndim > 1:
-        wav = wav.mean(dim=0)
-    if samples.sample_rate != tgt_sr:
-        wav = ta.functional.resample(wav, samples.sample_rate, tgt_sr)
+    wav = resample(samples.data, samples.sample_rate, tgt_sr)  # reuse the shared helper
     tc.save(wav, cache_path)
     return wav
 
@@ -69,7 +65,8 @@ class FMAPairDataset(tc.utils.data.Dataset):
         window_sec: float = DEFAULT_WIN_LEN_S,
         target_sr: int = DEFAULT_TGT_SR,
         min_offset_sec: float = DEFAULT_MIN_OFF_S,
-        cache_dir: str | os.PathLike | None = None
+        cache_dir: str | os.PathLike | None = None,
+        augmenter: AudioAugmenter | None = None,
 
     ) -> None:
         self.ds = dataset
@@ -77,6 +74,7 @@ class FMAPairDataset(tc.utils.data.Dataset):
         self.min_offset = int(min_offset_sec * target_sr)
         self.target_sr = target_sr
         self.cache_dir = None if cache_dir is None else pathlib.Path(cache_dir)
+        self.augmenter = augmenter
 
         if self.cache_dir is not None:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -106,6 +104,8 @@ class FMAPairDataset(tc.utils.data.Dataset):
         wav = self._load_resampled(index)
         win_a, start_a = self._rand_window(wav)
         win_b, _ = self._rand_window(wav, exclude=start_a)
+        if self.augmenter:
+            return self.augmenter(win_a), self.augmenter(win_b)
         return win_a, win_b
 
 

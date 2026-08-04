@@ -1,3 +1,4 @@
+from music_encoding.augmenter import AudioAugmenter
 import os
 from typing import cast
 from importlib.resources import path
@@ -118,7 +119,8 @@ if __name__ == "__main__":
     )
 
     base_ds = datasets.load_dataset("benjamin-paine/free-music-archive-small")["train"]
-    ds = FMAPairDataset(base_ds, cache_dir="./cached")
+    augmenter = AudioAugmenter()
+    ds = FMAPairDataset(base_ds, cache_dir="./cached", augmenter=augmenter)
     dl = tc.utils.data.DataLoader(
         ds,
         batch_size=args["batch_size"],
