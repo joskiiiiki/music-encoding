@@ -229,3 +229,7 @@ training_*.csv
 checkpoints/
 
 *.wav
+*.png
+
+similar_pairs/
+chroma_db/

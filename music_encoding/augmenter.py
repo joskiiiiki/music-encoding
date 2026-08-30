@@ -58,13 +58,11 @@ class AudioAugmenter:
         sr: int = 22050,
         noise_snr_range: tuple[float, float] = (5.0, 20.0),
         gain_db_range: tuple[float, float] = (-6.0, 6.0),
-        pitch_range_semitones: tuple[float, float] = (-2.0, 2.0),
         rir_t60s: tuple[float, ...] = (0.2, 0.4, 0.8),
     ):
         self.sr = sr
         self.noise_snr_range = noise_snr_range
         self.gain_db_range = gain_db_range
-        self.pitch_range = pitch_range_semitones
         # precompute a small bank of synthetic room impulse responses (cheap, reusable)
         self.rirs = [self._make_synthetic_rir(t60) for t60 in rir_t60s]
 
@@ -100,8 +98,11 @@ class AudioAugmenter:
         return ta.functional.lowpass_biquad(wav, self.sr, cutoff)
 
     def __call__(self, wav: tc.Tensor) -> tc.Tensor:
-        # apply a random subset — not every augmentation every time, so the
-        # network sees a genuine distribution of distortion combinations
+        # noise (always) -> lowpass (prob) -> gain (prob). Noise is unconditional
+        # since it's a near-constant feature of real query audio, and applying it
+        # every time avoids leaving clean/clean pairs that encourage collapse.
+        # Reverb and pitch shift are excluded by default; Mixup runs separately in
+        # the training loop since it needs cross-sample (batch) visibility.
         wav = self.add_noise(wav)
         # if random.random() < 0.4:
         #     wav = self.add_reverb(wav)
@@ -110,3 +111,51 @@ class AudioAugmenter:
         if random.random() < 0.5:
             wav = self.gain(wav)
         return wav
+
+
+class Mixup:
+    """
+    In-batch sample mixing (domain-agnostic linear interpolation between two
+    batch members). Operates on a *batch* of tensors — any shape with a leading
+    batch dim, e.g. (B, N) waveforms or (B, 1, n_mels, T) spectrograms — not a
+    single sample, since it needs visibility into other samples in the batch.
+    Applied in the training loop (after moving to device), independently to each
+    view, so each gets a different partner. The dataset now returns spectrograms,
+    so Mixup blends spectrograms.
+    """
+
+    def __init__(
+        self,
+        alpha: float = 0.4,
+        target_weight_min: float = 0.6,
+        p: float = 0.5,
+    ):
+        self.alpha = alpha
+        self.target_weight_min = target_weight_min
+        self.p = p
+        self.beta = tc.distributions.Beta(alpha, alpha)
+
+    def __call__(self, wav: tc.Tensor) -> tc.Tensor:
+        B = wav.shape[0]
+        device = wav.device
+        if B < 2:
+            return wav
+
+        # partner index j != i for every sample: sample uniformly from [0, B-2],
+        # then shift any value >= i up by one, mapping [0, B-2] bijectively onto
+        # {0..B-1}\{i}. Guaranteed self-pairing-free, no permutation bookkeeping.
+        j = tc.randint(0, B - 1, (B,), device=device)
+        j = j + (j >= tc.arange(B, device=device)).to(j.dtype)
+        partners = wav[j]
+
+        # weight of the ORIGINAL (target) signal; keep it dominant
+        weight = self.beta.sample((B,)).to(device).clamp(min=self.target_weight_min)
+        # only mix a per-sample random subset; the rest keep weight 1.0 (unchanged)
+        apply = tc.rand(B, device=device) < self.p
+        # (B,) broadcastable over any trailing shape — (B, N) waveforms or
+        # (B, 1, n_mels, T) spectrograms
+        weight = tc.where(apply, weight, tc.ones_like(weight)).view(
+            B, *([1] * (wav.dim() - 1))
+        )
+
+        return weight * wav + (1.0 - weight) * partners

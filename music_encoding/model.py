@@ -1,5 +1,4 @@
 import torch as tc
-import torchaudio as ta
 from torch import nn
 
 
@@ -27,17 +26,10 @@ class BarlowTwinsLoss:
 class SiameseEncoderBT(nn.Module):
     def __init__(
         self,
-        sr: int = 22050,
-        n_mels: int = 64,
         embed_dims: int = 128,
         proj_dims: int = 8192,
     ) -> None:
         super().__init__()
-        self.mel = ta.transforms.MelSpectrogram(
-            sample_rate=sr, n_fft=1024, hop_length=256, n_mels=n_mels
-        )
-        self.to_db = ta.transforms.AmplitudeToDB()
-
         self.conv = nn.Sequential(
             nn.Conv2d(1, 32, 3, padding=1),
             nn.BatchNorm2d(32),
@@ -51,9 +43,23 @@ class SiameseEncoderBT(nn.Module):
             nn.BatchNorm2d(128),
             nn.SiLU(),
             nn.MaxPool2d(2),
-            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(128, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.SiLU(),
+            nn.MaxPool2d(2),
+            nn.AdaptiveAvgPool2d(2),
+            nn.Flatten(),
         )
-        self.embed = nn.Linear(128, embed_dims)
+        # single conv path: 128 ch × 2×2 (AdaptiveAvgPool2d(2)) = 512 features.
+        # No early-feature concat — the embed takes just the conv stack's output.
+        self.embed = nn.Sequential(
+            nn.Linear(128 * 2 * 2, embed_dims * 2),
+            nn.SiLU(),
+            nn.Linear(embed_dims * 2, embed_dims),
+            nn.SiLU(),
+            nn.Linear(embed_dims, embed_dims),
+        )
+
         self.projector = nn.Sequential(
             nn.Linear(embed_dims, proj_dims),
             nn.BatchNorm1d(proj_dims),
@@ -64,19 +70,21 @@ class SiameseEncoderBT(nn.Module):
             nn.Linear(proj_dims, proj_dims),
         )
 
-    def forward(self, wav: tc.Tensor) -> tuple[tc.Tensor, tc.Tensor]:
-        x = self.to_db(self.mel(wav)).unsqueeze(1)
-        x = self.conv(x)
+    def forward(self, spec: tc.Tensor) -> tuple[tc.Tensor, tc.Tensor]:
+        # expects a (B, 1, n_mels, T) log-mel spectrogram, already computed and
+        # augmented upstream (see LogMelSpectrogram in twin_dataset.py) — the
+        # conv stack onward.
+        x = self.conv(spec)
         x = x.view(x.size(0), -1)
         emb = self.embed(x)
         z = self.projector(emb)
         return emb, z
 
     def forward_pair(
-        self, wav_a: tc.Tensor, wav_b: tc.Tensor
+        self, spec_a: tc.Tensor, spec_b: tc.Tensor
     ) -> tuple[tc.Tensor, tc.Tensor, tc.Tensor, tc.Tensor]:
-        wav = tc.cat([wav_a, wav_b], dim=0)
-        emb, z = self.forward(wav)
+        spec = tc.cat([spec_a, spec_b], dim=0)
+        emb, z = self.forward(spec)
         emb_a, emb_b = emb.chunk(2, dim=0)
         z_a, z_b = z.chunk(2, dim=0)
         return emb_a, emb_b, z_a, z_b

@@ -22,10 +22,12 @@
           ps.numpy
           ps.datasets          
           ps.transformers
-          ps.transformers
           ps.ipython
           ps.matplotlib
           ps.pillow
+          ps.chromadb  # vector DB for embedding lookup in the eval scripts
+          ps.pyvis  # interactive (HTML) graph output for the network plots
+          ps.gdown  # MTG-Jamendo download script dependency
         ]);
       in
       {
