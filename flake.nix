@@ -36,6 +36,7 @@
             python
             pkgs.ty
             pkgs.ruff
+            pkgs.runpodctl
 
           ];
         };
