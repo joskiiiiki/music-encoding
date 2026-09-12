@@ -1,0 +1,412 @@
+<title>Does It Know It's the Same Song?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* Token system shared with REPORT.html — the two documents are companions. */
+  :root {
+    --paper: #f6f5f8;
+    --surface: #ffffff;
+    --panel: #efeef4;
+    --panel-2: #e7e4ee;
+    --ink: #1b1725;
+    --ink-2: #56506b;
+    --ink-3: #7d7691;
+    --rule: #ddd9e4;
+    --rule-2: #c9c3d6;
+    --accent: #6b3fa0;
+    --accent-soft: #ece4f6;
+    --data: #d4552a;
+    --good: #2f7d5b;
+    --good-soft: #e2f0e8;
+    --warn: #a8641a;
+    --warn-soft: #f7ebdb;
+    --bad: #b03a52;
+    --bad-soft: #f8e5e9;
+    --shadow: 0 1px 2px rgba(27, 23, 37, .06), 0 8px 24px -12px rgba(27, 23, 37, .14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14111b; --surface: #1c1826; --panel: #221d2e; --panel-2: #2a2438;
+      --ink: #ece8f3; --ink-2: #a99fbb; --ink-3: #8b81a0;
+      --rule: #322b41; --rule-2: #433a55;
+      --accent: #b28cf0; --accent-soft: #2a2140;
+      --data: #f0834f; --good: #6fd1a0; --good-soft: #1d3229;
+      --warn: #e0a95c; --warn-soft: #33281a; --bad: #f08aa0; --bad-soft: #351f26;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14111b; --surface: #1c1826; --panel: #221d2e; --panel-2: #2a2438;
+    --ink: #ece8f3; --ink-2: #a99fbb; --ink-3: #8b81a0;
+    --rule: #322b41; --rule-2: #433a55;
+    --accent: #b28cf0; --accent-soft: #2a2140;
+    --data: #f0834f; --good: #6fd1a0; --good-soft: #1d3229;
+    --warn: #e0a95c; --warn-soft: #33281a; --bad: #f08aa0; --bad-soft: #351f26;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.5rem 6rem; }
+
+  header.masthead {
+    border-bottom: 1px solid var(--rule); margin-bottom: 3rem;
+    padding: 3.5rem 0 1.75rem; position: relative; overflow: hidden;
+  }
+  /* the null distribution, as a texture: a tight band of values */
+  .band {
+    position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(90deg,
+      var(--rule-2) 0 1px, transparent 1px 14px);
+    -webkit-mask-image: linear-gradient(100deg, transparent 40%, #000 85%, transparent);
+    mask-image: linear-gradient(100deg, transparent 40%, #000 85%, transparent);
+    opacity: .5; pointer-events: none;
+  }
+  .masthead > * { position: relative; }
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .72rem; font-weight: 500; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .9rem;
+  }
+  h1 {
+    font-family: "Newsreader", ui-serif, Georgia, serif;
+    font-weight: 500; font-size: clamp(2.1rem, 5.5vw, 3.15rem);
+    line-height: 1.08; letter-spacing: -.015em; margin: 0 0 1rem; text-wrap: balance;
+  }
+  .standfirst { font-size: 1.14rem; color: var(--ink-2); max-width: 60ch; margin: 0 0 1.75rem; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: .5rem 1.75rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .76rem; color: var(--ink-3);
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  .status {
+    display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+    border-radius: 6px; overflow: hidden; margin-top: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+  .status div { background: var(--surface); padding: .85rem 1rem; }
+  .status dt {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 .3rem;
+  }
+  .status dd { margin: 0; font-size: 1.02rem; font-weight: 600; }
+
+  section { margin: 0 0 3.5rem; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: .85rem;
+    border-bottom: 1px solid var(--rule); padding-bottom: .6rem; margin-bottom: 1.5rem;
+  }
+  .sec-num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .8rem; font-weight: 600; color: var(--accent); flex: none; padding-top: .3rem;
+  }
+  h2 {
+    font-family: "Newsreader", ui-serif, Georgia, serif;
+    font-weight: 500; font-size: 1.72rem; letter-spacing: -.01em;
+    margin: 0; text-wrap: balance;
+  }
+  h3 { font-weight: 600; font-size: 1.03rem; margin: 2.25rem 0 .6rem; }
+  p { max-width: 68ch; margin: 0 0 1rem; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .855em; }
+  p code, li code, td code { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: .08em .34em; }
+  ul, ol { max-width: 68ch; padding-left: 1.15rem; margin: 0 0 1rem; }
+  li { margin-bottom: .5rem; }
+
+  .scroller { overflow-x: auto; margin: 1.25rem 0 1.5rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  caption {
+    text-align: left; padding: .8rem 1rem .2rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .7rem; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3);
+  }
+  th, td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-2); background: var(--panel); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: .855rem; }
+
+  /* the argument in layout: raw is uninformative, so it reads muted;
+     whitened is the space that separates, so it carries the accent */
+  .dim { color: var(--ink-3); }
+  .live { color: var(--data); font-weight: 600; }
+  .pair-name { font-weight: 600; }
+  .pair-note { display: block; color: var(--ink-3); font-size: .82rem; font-weight: 400; }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 1.25rem 1.4rem; margin: 1.5rem 0; box-shadow: var(--shadow);
+  }
+  .callout h3 { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .verdict {
+    border-left: 3px solid var(--warn); background: var(--warn-soft);
+    padding: 1rem 1.2rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0;
+  }
+  .verdict p { margin: 0; max-width: none; }
+  .verdict .lead {
+    font-family: "Newsreader", ui-serif, Georgia, serif;
+    font-size: 1.18rem; font-weight: 500; margin-bottom: .5rem; display: block;
+  }
+
+  pre {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+    padding: .95rem 1.1rem; overflow-x: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .8rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+
+  footer { border-top: 1px solid var(--rule); padding-top: 1.5rem; font-size: .88rem; color: var(--ink-3); }
+  footer p { max-width: 68ch; }
+  @media (max-width: 560px) { body { font-size: 16px; } .wrap { padding: 0 1.1rem 4rem; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="band" aria-hidden="true"></div>
+    <p class="eyebrow">Self-supervised audio · case study</p>
+    <h1>Does It Know It's the Same Song?</h1>
+    <p class="standfirst">
+      The encoder is meant to be a fingerprint. Handed four pairs of real songs —
+      two versions of one track, two tracks by one artist, two of the same era, and
+      two unrelated pieces — it turns out to rank <em>artist</em> above <em>song</em>.
+    </p>
+    <div class="meta">
+      <span><b>Model</b> checkpoint_e1000 · 128k steps</span>
+      <span><b>Corpus</b> 32,783 tracks</span>
+      <span><b>Audio</b> 30 s Deezer / iTunes previews</span>
+    </div>
+    <dl class="status">
+      <div><dt>Raw cosine tells you nothing</dt><dd>unrelated pair scores 0.92</dd></div>
+      <div><dt>Same song, two versions</dt><dd>only z = +1.9</dd></div>
+      <div><dt>Same artist, two songs</dt><dd>z = +2.6 — <em>higher</em></dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>The question, and how it was asked</h2></div>
+    <p>
+      The model's job is to be a Shazam-style fingerprint: any 5-second window of a
+      track should map near its other windows, robustly to noise, EQ and compression.
+      So the obvious test is to hand it two songs by name and ask how similar it
+      thinks they are.
+    </p>
+<pre><code>python -m music_encoding.compare_songs \
+    --a "Radiohead - Creep" --b "Radiohead - Creep (Acoustic)"</code></pre>
+    <p>
+      That resolves each name to a 30-second preview (Deezer, with iTunes as
+      fallback), downloads it, runs it through the encoder, and reports the cosine
+      similarity of the two embeddings — <strong>and where that number sits in the
+      corpus's own distribution</strong>. That last part is not decoration; without it
+      the number is uninterpretable.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Four pairs, and the null they live in</h2></div>
+    <p>
+      Random pairs of corpus tracks sit at <strong>raw 0.943 ± 0.020</strong> and
+      <strong>whitened 0.000 ± 0.133</strong>. Read the raw column against that: an
+      unrelated pair scores 0.92, and two versions of the same song score 0.958 —
+      every pair inside about one and a third standard deviations of a random pairing.
+    </p>
+    <div class="scroller">
+      <table>
+        <caption>Cosine similarity, and z against the corpus null</caption>
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th class="num">raw</th><th class="num">raw z</th><th class="num">raw %</th>
+            <th class="num">whitened</th><th class="num">whitened z</th><th class="num">whitened %</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pair-name">Creep vs Karma Police</span><span class="pair-note">same artist, different songs</span></td>
+            <td class="num dim">0.9696</td><td class="num dim">+1.31</td><td class="num dim">93.4</td>
+            <td class="num live">+0.3495</td><td class="num live">+2.62</td><td class="num live">98.5</td>
+          </tr>
+          <tr>
+            <td><span class="pair-name">Creep vs Creep (Acoustic)</span><span class="pair-note">the same song, two versions</span></td>
+            <td class="num dim">0.9575</td><td class="num dim">+0.71</td><td class="num dim">75.4</td>
+            <td class="num live">+0.2524</td><td class="num live">+1.89</td><td class="num live">95.8</td>
+          </tr>
+          <tr>
+            <td><span class="pair-name">Creep vs Goldberg Variations</span><span class="pair-note">unrelated</span></td>
+            <td class="num dim">0.9195</td><td class="num dim">−1.17</td><td class="num dim">11.2</td>
+            <td class="num">+0.0246</td><td class="num">+0.18</td><td class="num">61.1</td>
+          </tr>
+          <tr>
+            <td><span class="pair-name">Wonderwall vs Song 2</span><span class="pair-note">same era and genre, different artists</span></td>
+            <td class="num dim">0.9244</td><td class="num dim">−0.93</td><td class="num dim">15.4</td>
+            <td class="num">−0.0280</td><td class="num">−0.21</td><td class="num">44.2</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Quoting a raw cosine of “0.96” as evidence of similarity would be reporting
+      noise. The <span class="live">whitened</span> space does separate the pairs —
+      against a null centred on zero — and the ordering is sensible.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>The uncomfortable part</h2></div>
+    <div class="verdict">
+      <span class="lead">Two different Radiohead songs score higher than two versions of the same song.</span>
+      <p>
+        0.3495 vs 0.2524 — in both spaces, and by a wider margin than separates
+        “same song” from “unrelated” in the raw space.
+      </p>
+    </div>
+    <p>
+      The embedding is grouping by <strong>artist and production style</strong>, not
+      by song identity. <em>Karma Police</em> shares Radiohead's recording signature;
+      <em>Creep (Acoustic)</em> is the same composition re-arranged with different
+      instrumentation and tempo. For a fingerprinting product that is the wrong
+      signal: it would prefer a stylistic match by the same act over the actual
+      recording you played.
+    </p>
+    <p>
+      This is consistent with the quantitative evaluation rather than contradicting
+      it. Over all 163,915 windows, retrieval top-1 is <strong>0.673</strong>
+      (top-10 0.793, chance 2.4e-05): the right track is usually <em>findable</em>,
+      but a third of queries still return the wrong track first, and the ranking is
+      evidently driven more by timbre than by identity. Even the strongest pair here
+      reaches only <strong>z = +2.6</strong> — a fingerprint worth shipping would
+      want z ≫ 3.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Why the numbers can be trusted</h2></div>
+    <p>
+      The model never saw raw audio: it was trained on MTG-Jamendo's precomputed
+      96-band log-mels (merged to 64 bands), and <strong>MTG's STFT parameters are
+      undocumented</strong>. So embedding a downloaded preview means reproducing a
+      front end we did not have — and getting it wrong would make every number above
+      a measurement of <em>our preprocessing</em> rather than of the model.
+    </p>
+    <div class="callout">
+      <h3>Ground truth made it checkable</h3>
+      <p>
+        The MTG audio tarball holds tracks whose <code>.npy</code> we <em>also</em>
+        have, so the same track can be embedded from audio and from MTG's own mel,
+        and the two compared.
+      </p>
+    </div>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Front end</th><th class="num">Cosine to MTG's own embedding</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>sr=24000, n_fft=1024, hop=512, n_mels=96, norm='slaney'</code></td>
+            <td class="num live">0.9872</td>
+          </tr>
+          <tr><td>same, <code>norm=None</code> (torchaudio's default)</td><td class="num dim">0.9475</td></tr>
+          <tr><td><code>sr=48000, n_fft=2048, hop=1024, norm='slaney'</code></td><td class="num dim">0.9768</td></tr>
+          <tr><td><code>sr=48000, n_fft=2048, hop=1024, norm=None</code></td><td class="num dim">0.9044</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The answer is librosa with essentially all defaults. <strong><code>norm='slaney'</code>
+      was the missing piece</strong> — torchaudio's <code>MelSpectrogram</code> defaults
+      to <code>norm=None</code>, which costs 0.047. Two incidental findings: the tarball
+      files are full tracks, not 30-second previews despite the <code>raw_30s</code>
+      name, and the frame rate is 46.875 fps (24000/512), <em>not</em> the 43.07 fps of
+      the repo's own waveform path.
+    </p>
+    <p>
+      So every preview cosine carries a <strong>known ~1.3% preprocessing error</strong>.
+      Decimals beyond ~0.01 are noise, which is why the percentile columns carry the
+      argument rather than the raw cosines. A second prerequisite was verified rather
+      than assumed: the whitening transform is not stored, but it is reproducible from
+      <code>tracks_raw</code> alone (to a max diff of 1e-5), so query embeddings can be
+      whitened consistently with the corpus.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Reproducing it</h2></div>
+<pre><code># by name (Deezer search, iTunes fallback)
+python -m music_encoding.compare_songs --a "Radiohead - Creep" \
+    --b "Radiohead - Creep (Acoustic)"
+
+# exactly, by ISRC — Deezer's search returns the ISRC, so this is unambiguous
+python -m music_encoding.compare_songs --a-isrc GBAYE9200070 --b "Portishead - Roads"</code></pre>
+    <p>
+      The tool also reports each song's nearest corpus tracks, which is where it is
+      most useful in practice — it shows what the model thinks the song sounds like.
+    </p>
+<pre><code>[A] nearest corpus tracks to 'Creep':
+  +0.987  alternative    'Tramonti' — 'Introversia'
+  +0.987  alternative    'Warmachine' — 'Shearer'</code></pre>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>What this is not</h2></div>
+    <ul>
+      <li><strong>n = 4.</strong> An illustration, not an evaluation. The quantitative
+      evidence is the retrieval metric over 163,915 windows; this study explains
+      <em>why</em> that metric matters, and should not be quoted as a benchmark.</li>
+      <li><strong>30-second previews are usually the hook</strong>, not a
+      representative sample of a track, and they are mastered differently from the
+      corpus audio — the two Creep previews differ by 18 dB in median level. The
+      embedding is not loudness-invariant by construction.</li>
+      <li><strong>Two different populations.</strong> The previews are mainstream
+      commercial music; the corpus is largely Creative Commons and indie. The tool
+      therefore also reports a query-vs-corpus null, which is the fairer yardstick
+      (it agreed closely here: 0.946 ± 0.016).</li>
+      <li><strong>Spotify cannot be used at all.</strong> It removed 30-second
+      previews from the Web API on 2024-11-27 with no scope to re-enable them for a
+      new app, so a Spotify track id cannot be resolved to audio. Deezer and iTunes
+      are free and unauthenticated.</li>
+      <li><strong>Previews are fetched at request time for analysis only</strong> and
+      never stored or redistributed; both providers' terms restrict caching audio.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>What would move the needle</h2></div>
+    <p>
+      The failure mode is that the representation encodes <strong>style</strong> more
+      than <strong>identity</strong>. Three directions, in rough order of promise:
+    </p>
+    <ol>
+      <li><strong>More steps.</strong> The step lever was still paying at 128k —
+      retrieval ran 0.345 → 0.673 across a day of training — so this is the proven one.</li>
+      <li><strong>Instance discrimination.</strong> Barlow Twins pulls two views of one
+      track together and decorrelates dimensions, but never pushes <em>different tracks
+      apart</em> — exactly the signal that would separate “same song” from “same
+      artist”. A contrastive term was implemented and tested; at weight 30 it proved to
+      be a reparameterization equivalent to free whitening, so it needs a larger weight
+      or hard-negative mining to bite.</li>
+      <li><strong>A bigger embedding</strong> (128 → 256), which the style-versus-identity
+      confusion gives a concrete reason to try.</li>
+    </ol>
+  </section>
+
+  <footer>
+    <p>
+      Companion to <code>REPORT.md</code> (the evaluation port, metric corrections and
+      lever ablations) and <code>instructions.md</code> §12. Source of record for this
+      study: <code>CASE_STUDY.md</code>.
+    </p>
+  </footer>
+
+</div>

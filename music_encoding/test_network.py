@@ -6,8 +6,7 @@ decoding or model forwards. Force-directed layout so clusters of similar tracks
 appear spatially; node color is a metadata column so you can eyeball whether
 clusters correspond to it.
 
-Note: the DB metadata has no `bpm`; numeric columns are `released` (year) and
-`listens`.
+Note: the DB metadata has no `bpm`; the only numeric column is `released` (year).
 
 Usage:
     python -m music_encoding.test_network [--db-dir chroma_db] [--n-tracks 400] [--color genres] [--interactive]
@@ -36,7 +35,7 @@ def node_colors(metas: list[dict], field: str):
     """Return (colors, cmap, norm, legend) from the DB metadata dicts.
 
     Categorical -> tab20 for the top MAX_CATEGORIES values (rest gray) + legend.
-    Numeric (`released`, `listens`) -> viridis + colorbar. Missing -> gray."""
+    Numeric (`released`) -> viridis + colorbar. Missing -> gray."""
     # CLI uses the dataset column name (genres); the DB metadata key is the
     # singular primary genre
     field = {"genres": "genre"}.get(field, field)
@@ -88,7 +87,7 @@ def save_interactive_html(
         tooltip = (
             f"<b>{m.get('title', '')}</b> — {m.get('artist', '')}<br>"
             f"genre: {m.get('genre', '?')} | released: {m.get('released', '?')}<br>"
-            f"listens: {m.get('listens', '?')}"
+            f"album: {m.get('album', '?')}"
         )
         net.add_node(i, label="", title=tooltip, color=hex_colors[i])
     for i, j, d in G.edges(data=True):

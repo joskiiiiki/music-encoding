@@ -233,3 +233,7 @@ checkpoints/
 
 similar_pairs/
 chroma_db/
+
+# MCP memory server knowledge graph (local, accumulated per-machine)
+.claude/memory.json
+.claude/memory.json.lock

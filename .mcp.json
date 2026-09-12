@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "memory": {
+      "type": "stdio",
+      "command": "mcp-server-memory",
+      "args": [],
+      "env": {
+        "MEMORY_FILE_PATH": "/home/johannes/music-encoding/.claude/memory.json"
+      }
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "mcp-server-filesystem",
+      "args": [
+        "/home/johannes/music-encoding",
+        "/home/johannes/mtg_jamendo",
+        "/home/johannes/mtg-jamendo-dataset/data",
+        "/home/johannes/mtg"
+      ],
+      "env": {}
+    }
+  }
+}

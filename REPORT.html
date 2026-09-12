@@ -1,0 +1,782 @@
+<title>Fingerprint Encoder Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* ---- tokens: light is the complete palette; dark redefines only tokens ---- */
+  :root {
+    --paper: #f6f5f8;
+    --surface: #ffffff;
+    --panel: #efeef4;
+    --panel-2: #e7e4ee;
+    --ink: #1b1725;
+    --ink-2: #56506b;
+    --ink-3: #7d7691;
+    --rule: #ddd9e4;
+    --rule-2: #c9c3d6;
+    --accent: #6b3fa0;
+    --accent-soft: #ece4f6;
+    --data: #d4552a;
+    --good: #2f7d5b;
+    --good-soft: #e2f0e8;
+    --warn: #a8641a;
+    --warn-soft: #f7ebdb;
+    --bad: #b03a52;
+    --bad-soft: #f8e5e9;
+    --shadow: 0 1px 2px rgba(27, 23, 37, .06), 0 8px 24px -12px rgba(27, 23, 37, .14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14111b;
+      --surface: #1c1826;
+      --panel: #221d2e;
+      --panel-2: #2a2438;
+      --ink: #ece8f3;
+      --ink-2: #a99fbb;
+      --ink-3: #8b81a0;
+      --rule: #322b41;
+      --rule-2: #433a55;
+      --accent: #b28cf0;
+      --accent-soft: #2a2140;
+      --data: #f0834f;
+      --good: #6fd1a0;
+      --good-soft: #1d3229;
+      --warn: #e0a95c;
+      --warn-soft: #33281a;
+      --bad: #f08aa0;
+      --bad-soft: #351f26;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14111b;
+    --surface: #1c1826;
+    --panel: #221d2e;
+    --panel-2: #2a2438;
+    --ink: #ece8f3;
+    --ink-2: #a99fbb;
+    --ink-3: #8b81a0;
+    --rule: #322b41;
+    --rule-2: #433a55;
+    --accent: #b28cf0;
+    --accent-soft: #2a2140;
+    --data: #f0834f;
+    --good: #6fd1a0;
+    --good-soft: #1d3229;
+    --warn: #e0a95c;
+    --warn-soft: #33281a;
+    --bad: #f08aa0;
+    --bad-soft: #351f26;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .5);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem 6rem; }
+
+  /* ---------------- masthead ---------------- */
+  header.masthead {
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 3rem;
+    padding: 3.5rem 0 1.75rem;
+    position: relative;
+    overflow: hidden;
+  }
+  /* the BT target: identity — 1s on the diagonal, 0 off it. Restrained. */
+  .diag {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle, var(--rule-2) 1.1px, transparent 1.1px);
+    background-size: 22px 22px;
+    -webkit-mask-image: linear-gradient(115deg, transparent 32%, #000 78%, transparent 100%);
+    mask-image: linear-gradient(115deg, transparent 32%, #000 78%, transparent 100%);
+    opacity: .55; pointer-events: none;
+  }
+  .masthead > * { position: relative; }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .72rem; font-weight: 500;
+    letter-spacing: .13em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 .9rem;
+  }
+  h1 {
+    font-family: "Newsreader", ui-serif, Georgia, serif;
+    font-weight: 500; font-size: clamp(2.1rem, 5.5vw, 3.15rem);
+    line-height: 1.1; letter-spacing: -.015em;
+    margin: 0 0 1rem; text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.12rem; color: var(--ink-2);
+    max-width: 62ch; margin: 0 0 1.75rem;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: .5rem 1.75rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .76rem; color: var(--ink-3);
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---------------- status strip ---------------- */
+  .status {
+    display: grid; gap: 1px; background: var(--rule);
+    border: 1px solid var(--rule); border-radius: 6px;
+    overflow: hidden; margin-top: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  }
+  .status div { background: var(--surface); padding: .85rem 1rem; }
+  .status dt {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 .3rem;
+  }
+  .status dd {
+    margin: 0; font-size: .95rem; font-weight: 600;
+    display: flex; align-items: center; gap: .45rem;
+  }
+  .dot { width: .5rem; height: .5rem; border-radius: 50%; flex: none; }
+  .dot.ok { background: var(--good); }
+  .dot.run { background: var(--warn); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  @media (prefers-reduced-motion: reduce) { .dot.run { animation: none } }
+
+  /* ---------------- sections ---------------- */
+  section { margin: 0 0 3.5rem; scroll-margin-top: 1.5rem; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: .85rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: .6rem; margin-bottom: 1.5rem;
+  }
+  .sec-num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .8rem; font-weight: 600; color: var(--accent);
+    flex: none; padding-top: .3rem;
+  }
+  h2 {
+    font-family: "Newsreader", ui-serif, Georgia, serif;
+    font-weight: 500; font-size: 1.72rem; letter-spacing: -.01em;
+    margin: 0; text-wrap: balance;
+  }
+  h3 {
+    font-family: "Source Sans 3", sans-serif;
+    font-weight: 600; font-size: 1.03rem;
+    margin: 2.25rem 0 .6rem; letter-spacing: -.005em;
+  }
+  p { max-width: 68ch; margin: 0 0 1rem; }
+  p.wide, .wide p { max-width: none; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); }
+  code, .mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .855em;
+  }
+  p code, li code, td code {
+    background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 3px; padding: .08em .34em;
+  }
+  ul, ol { max-width: 68ch; padding-left: 1.15rem; margin: 0 0 1rem; }
+  li { margin-bottom: .4rem; }
+
+  /* ---------------- findings ---------------- */
+  .findings { display: grid; gap: 1rem; margin: 0; padding: 0; list-style: none; }
+  .findings li {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 1.1rem 1.25rem; margin: 0;
+    display: grid; grid-template-columns: auto 1fr; gap: 0 1rem;
+  }
+  .findings .n {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .82rem; font-weight: 600; color: var(--data);
+    padding-top: .18rem;
+  }
+  .findings p { margin: 0; max-width: none; }
+  .findings b { font-weight: 600; }
+
+  /* ---------------- tables ---------------- */
+  .scroller { overflow-x: auto; margin: 1.25rem 0 1.5rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  caption {
+    text-align: left; padding: .8rem 1rem .2rem;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .7rem; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  th, td {
+    padding: .58rem .8rem; text-align: left;
+    border-bottom: 1px solid var(--rule); vertical-align: top;
+  }
+  thead th {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .7rem; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--ink-2);
+    background: var(--panel); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: .855rem; }
+  tbody tr.hi td { background: var(--accent-soft); }
+  tbody tr.hi td:first-child { font-weight: 600; }
+  .best { color: var(--data); font-weight: 600; }
+
+  /* verdict chips */
+  .chip {
+    display: inline-block; white-space: nowrap;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+    padding: .16rem .5rem; border-radius: 999px; border: 1px solid;
+  }
+  .chip.dead { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+  .chip.live { color: var(--good); border-color: var(--good); background: var(--good-soft); }
+  .chip.wash { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+
+  /* ---------------- corrections ---------------- */
+  .corr { display: grid; gap: 1.15rem; }
+  .corr article {
+    background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 1.15rem 1.3rem;
+  }
+  .corr h3 { margin: 0 0 .5rem; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .corr p:last-child { margin-bottom: 0; }
+  .tag {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .64rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    border: 1px solid var(--rule-2); border-radius: 3px; padding: .15rem .45rem;
+  }
+
+  /* ---------------- callout ---------------- */
+  .callout {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 1.25rem 1.4rem; margin: 1.5rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout h3 { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  pre {
+    background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .95rem 1.1rem; overflow-x: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .8rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+
+  .warn-note {
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    padding: .9rem 1.1rem; margin: 1.25rem 0; border-radius: 0 4px 4px 0;
+  }
+  .warn-note p { margin: 0; max-width: none; font-size: .95rem; }
+
+  footer {
+    border-top: 1px solid var(--rule); padding-top: 1.5rem;
+    font-size: .88rem; color: var(--ink-3);
+  }
+  footer p { max-width: 68ch; }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 1.1rem 4rem; }
+    header.masthead { padding-top: 2.5rem; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="diag" aria-hidden="true"></div>
+    <p class="eyebrow">Self-supervised audio · Barlow Twins</p>
+    <h1>Fingerprint Encoder Audit</h1>
+    <p class="standfirst">
+      Making mel-mode checkpoints scorable, testing whether the model was ever
+      actually worse than the FMA-era numbers, and finding a lever that really
+      moves the metric.
+    </p>
+    <div class="meta">
+      <span><b>Date</b> 2026-09-11</span>
+      <span><b>Corpus</b> MTG-Jamendo · 32,783 tracks · 121 labels</span>
+      <span><b>Protocol</b> 5 seeded windows/track · 163,915 vectors</span>
+    </div>
+
+    <dl class="status">
+      <div>
+        <dt>Eval port &amp; metrics</dt>
+        <dd><span class="dot ok"></span> verified</dd>
+      </div>
+      <div>
+        <dt>Lever ablations</dt>
+        <dd><span class="dot ok"></span> verified</dd>
+      </div>
+      <div>
+        <dt>100-epoch run</dt>
+        <dd><span class="dot run"></span> in flight · 68/100</dd>
+      </div>
+    </dl>
+  </header>
+
+  <section id="tldr">
+    <div class="sec-head"><span class="sec-num">00</span><h2>What came out of it</h2></div>
+    <ol class="findings">
+      <li>
+        <span class="n">01</span>
+        <p><b>Mel-mode checkpoints could not be evaluated at all.</b> Every eval
+        decoded audio, which on this machine exists only as <code>.tar</code>
+        archives. <code>build_chroma --mel-root</code> now embeds straight from the
+        precomputed <code>.npy</code> spectrograms; the three DB-only evals needed
+        no changes.</p>
+      </li>
+      <li>
+        <span class="n">02</span>
+        <p><b>The model was never meaningfully worse than FMA.</b> That comparison
+        was invalid twice over — the old baselines came from a corpus with ~8×
+        fewer labels, and the genre metric was scoring against the
+        <em>alphabetically-first</em> tag. On clean labels the model scores
+        <b>0.410–0.438</b>, inside the historical 42–46% band.</p>
+      </li>
+      <li>
+        <span class="n">03</span>
+        <p><b>Three of the four levers the project's own notes pointed at are dead
+        ends</b>, measured rather than argued: the augmentation chain, the mel
+        resolution, and <code>lambd</code>. Epochs are the only confirmed lever.</p>
+      </li>
+      <li>
+        <span class="n">04</span>
+        <p><b>The bottleneck is the objective, not a hyperparameter.</b> Barlow
+        Twins pulls two views of one track together and decorrelates dimensions,
+        but never pushes <em>different tracks apart</em>. A 5&nbsp;s window's
+        nearest neighbour is its own track only <b>~0.41–0.44</b> of the time, and
+        whitening barely helps — so it is not a geometry problem.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="issues">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Issues faced</h2></div>
+
+    <h3>The blocker: no way to score a mel-mode run</h3>
+    <p>Training reads precomputed log-mel <code>.npy</code> files
+    (<code>~/mtg_jamendo</code>, 32,783 tracks). Every eval path decoded audio, and
+    this machine has no unpacked audio — only
+    <code>raw_30s_audio-low-*.tar</code>, with no <code>cached_mtg/</code>. So a
+    mel-mode run's <em>quality</em> was unknowable: the train CSV told you the loss
+    descended, never whether the embedding was any good.</p>
+
+    <h3>The <span class="mono">.npy</span> ↔ metadata join was documented wrong</h3>
+    <p>Project memory said the <code>.npy</code> ids <em>are</em> MTG track ids.
+    They are not: a stem is a bare integer (<code>214.npy</code>) while a TSV
+    <code>TRACK_ID</code> is <code>track_0000214</code>. The number also appears in
+    the TSV <code>PATH</code> column as
+    <code>&lt;num%100:02d&gt;/&lt;num&gt;.mp3</code>, matching the directory
+    layout. The join is <code>int(TRACK_ID.split("_")[1])</code>.</p>
+
+    <h3><span class="mono">autotagging.tsv</span> is a symlink to a curated subset</h3>
+    <p>It points at <code>raw_30s_cleantags_50artists.tsv</code>, which
+    <b>omits 65 of the 32,783</b> melspec tracks. Joining naively would either drop
+    those 65 — making the eval corpus a strict subset of the trained one — or give
+    them blank metadata, putting an empty <code>genre</code> into the k-NN majority
+    vote. Fixed with a fallback to the full <code>raw_30s.tsv</code> for exactly the
+    missing numbers.</p>
+
+    <h3>The existing <span class="mono">chroma_db/</span> was FMA-era, not MTG</h3>
+    <p>CLAUDE.md claimed the DB had been rebuilt with MTG embeddings. On inspection
+    it held <b>7,916 FMA tracks</b>: every row carried the FMA <code>listens</code>
+    key and FMA genres (<code>Hip-Hop</code>, <code>Pop</code>), not MTG's
+    (<code>punkrock</code>, <code>gospel</code>). The docs asserted a rebuild that
+    had not happened. Git cannot settle the baseline table's provenance either — the
+    table and every FMA reference arrive together in one squashed commit carrying
+    that same false claim.</p>
+    <div class="warn-note">
+      <p><b>Consequence:</b> the historical baselines are unusable for comparison,
+      and that DB has since been overwritten — so it cannot be re-measured.</p>
+    </div>
+
+    <h3>Chroma's <span class="mono">upsert</span> merges metadata instead of replacing it</h3>
+    <p>Rebuilding over the FMA DB left the FMA <code>listens</code> key on exactly
+    rows 0–7915 — the old DB's extent — while every <em>shared</em> key took the
+    correct MTG value. Harmless for the evals, which read only shared keys, but it
+    means a rebuild-in-place is not identical to a fresh DB. Separately, a run
+    covering fewer tracks than the last leaves surplus <em>vectors</em> behind.</p>
+
+    <h3>Several GB of avoidable Python floats</h3>
+    <p><code>build_chroma</code> materialised per-window embeddings with
+    <code>.tolist()</code>, and <code>db.load_all</code> accumulated every page as
+    Python floats. At 163,915 × 128 that is roughly 670&nbsp;MB of boxed floats on a
+    box with ~3&nbsp;GB free. Both now pass float32 numpy arrays. Measured peak RSS
+    is <b>flat at ~1.6&nbsp;GB from 100 → 3,000 tracks</b> — fixed runtime overhead,
+    not data-proportional.</p>
+
+    <h3>Operational hazards</h3>
+    <ul>
+      <li><b><code>train.py</code> writes checkpoints relative to the cwd</b>, so a
+      run started from the repo root silently overwrites <code>checkpoint_e0…</code>.
+      A 17-epoch ablation would have destroyed e0–e16. Experiments now run from
+      <code>~/mel_runs/&lt;tag&gt;/</code>.</li>
+      <li><b>Background jobs were killed mid-run</b> — twice, including one 100-epoch
+      attempt at epoch 0. Not OOM; GPU and RAM were clean. Fixed by launching with
+      <code>setsid nohup</code>, which the repo's own launch script already
+      recommends.</li>
+      <li><b>The LR schedule is inert.</b> Over 43 epochs the reference run's
+      <code>lr</code> never left 1e-4 — <code>ReduceLROnPlateau(patience=10)</code>
+      never fires, because the loss keeps inching down ~−1/epoch on a loss of ~627.
+      The model was never annealed.</li>
+    </ul>
+  </section>
+
+  <section id="corrections">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Corrections — including to my own work</h2></div>
+
+    <div class="corr">
+
+      <article>
+        <h3>My <span class="mono">lambd</span> conclusion was confounded by epochs
+          <span class="tag">self-correction</span></h3>
+        <p>I found <code>train.py</code>'s <code>--lambd</code> default (5e-2)
+        contradicting the docs (which said <code>2e-2</code> in one place and
+        <code>3e-3</code> in another, while <code>instructions.md</code> §5
+        recommends <code>2e-3</code>–<code>5e-3</code>), and that at e42
+        <code>off_diag</code> was <b>38% of the objective</b> while the mean
+        off-diagonal correlation was already only |c| ≈ 0.067. A harness sweep
+        showed <code>on_diag</code> falling 83 → 2 as λ dropped, and I concluded the
+        default was a real misconfiguration.</p>
+        <p><b>That was wrong.</b> I had compared λ=5e-2 <em>at 42 epochs</em> against
+        the others <em>at 17</em>. At matched 17 epochs all three are identical on
+        retrieval. And I was optimising <code>on_diag</code>, which is not a valid
+        proxy.</p>
+      </article>
+
+      <article>
+        <h3><span class="mono">on_diag</span> is not a valid proxy for the objective
+          <span class="tag">method</span></h3>
+        <p><code>on_diag</code> falls <b>447 → 334 → 228</b> across λ = 5e-2 → 2e-2
+        → 5e-3 with <b>no retrieval benefit whatsoever</b> (0.3453 / 0.3520 /
+        0.3553, within sampling noise). Mechanism: <code>off_diag</code> — redundancy
+        reduction — is what <em>spreads</em> the embedding cloud. Lowering λ removes
+        that pressure, the cloud contracts, and the two views of a track move closer,
+        which is exactly what <code>on_diag</code> measures, while different tracks
+        crowd together.</p>
+        <p>It remains useful for its original job: spotting a config whose two views
+        share too little signal to learn at all (pinned near ~800–1000 ≈ D). Real
+        changes should be judged on retrieval and the collapse count. I corrected
+        <code>instructions.md</code> §9 and CLAUDE.md rather than leaving the wrong
+        version standing.</p>
+      </article>
+
+      <article>
+        <h3>The genre metric was measuring the alphabetically-first tag
+          <span class="tag">metric bug</span></h3>
+        <p><b>82% of the corpus carries 2–9 genre tags, and the TSV stores them in
+        alphabetical order.</b> So <code>tags["genre"][0]</code> — which
+        <code>test_knn</code> had always scored against — means "the alphabetically
+        first genre". <code>track_0000946</code> is <code>ambient, chillout,
+        downtempo, easylistening, electronic, lounge</code> and was labelled
+        <b>ambient</b> because 'a' &lt; 'c'. A neighbour sharing a genuine genre
+        under a different first letter scored as wrong, deflating accuracy on ~80% of
+        the test set. This is the single change that most moved the headline number —
+        and it moved it <em>up</em>.</p>
+      </article>
+
+      <article>
+        <h3><span class="mono">db.py</span> never actually sorted by window
+          <span class="tag">latent bug</span></h3>
+        <p>The docstring promises ordering by <code>(track idx, window)</code>, but
+        the code parsed the window as <code>split("_")[3]</code> for ids shaped
+        <code>track_&lt;idx&gt;_w&lt;k&gt;</code> — whose split is
+        <code>['track', '&lt;idx&gt;', 'w&lt;k&gt;']</code>, three elements, so the
+        branch never ran and window was always 0. Fixed, and <b>verified to produce
+        identical eval numbers</b>, so no recorded figure is invalidated.</p>
+      </article>
+
+      <article>
+        <h3>Stale documentation corrected
+          <span class="tag">docs</span></h3>
+        <ul>
+          <li>CLAUDE.md described the conv stack as <b>3</b> blocks ending in
+          <code>AdaptiveAvgPool2d(1)</code>; <code>model.py</code> has <b>4</b>
+          blocks ending in <code>AdaptiveAvgPool2d(2)</code> → 512 features.</li>
+          <li>CLAUDE.md's <code>lambd</code> note quoted three different values
+          across two places.</li>
+          <li>CLAUDE.md's <code>chroma_db</code> claim, memory's <code>.npy</code>-id
+          claim, and <code>test_network.py</code>'s reference to a
+          <code>listens</code> key MTG does not have.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>Bugs in my own throwaway tooling
+          <span class="tag">self-correction</span></h3>
+        <ul>
+          <li>The chain-ablation harness fed <b>CPU</b> tensors to a CUDA model.
+          Under autocast that raises a misleading
+          <code>Input type (float) and bias type (c10::Half)</code> instead of a
+          device error, which cost several debugging rounds. The repo code was never
+          affected.</li>
+          <li>A monitor's <code>pgrep</code> pattern was malformed, producing a false
+          "process died" alarm.</li>
+          <li>The retrieval script parsed the window index with the same wrong split
+          as the <code>db.py</code> bug above.</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <section id="built">
+    <div class="sec-head"><span class="sec-num">03</span><h2>What was built</h2></div>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Change</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>build_chroma --mel-root</code><br><span class="mono" style="color:var(--ink-3);font-size:.8rem">+ --n-mels, --min-window-db</span></td>
+            <td>Mel-mode checkpoints could not be scored at all — the original blocker.</td>
+          </tr>
+          <tr>
+            <td><code>MelSpecWindowSource</code></td>
+            <td>Window cut, silence gate and mel merge shared by training <em>and</em>
+            eval so they cannot drift. Verified <b>bit-identical</b> to the
+            pre-refactor dataset over 8 configs (both <code>n_mels</code>, plain and
+            augmented) — a byte-for-byte A/B against the old class reconstructed
+            verbatim.</td>
+          </tr>
+          <tr>
+            <td><code>row_by_num</code> / <code>track_num</code><br><span class="mono" style="color:var(--ink-3);font-size:.8rem">+ raw_30s.tsv fallback</span></td>
+            <td>Joins <code>.npy</code> stems to TSV rows by number; complete metadata
+            for all 32,783.</td>
+          </tr>
+          <tr>
+            <td><code>test_knn</code> three scorings</td>
+            <td>The label-ambiguity fix.</td>
+          </tr>
+          <tr>
+            <td><b><code>test_retrieval.py</code></b> <span class="tag">new</span></td>
+            <td>The metric that matches the fingerprinting objective.</td>
+          </tr>
+          <tr>
+            <td><code>test_similar_pairs --mel-root</code><br><code>test_augmentation --mel-root</code></td>
+            <td>Both audio-blocked QA scripts now work as spectrogram PNGs.</td>
+          </tr>
+          <tr>
+            <td><code>db.py</code> paged float32 + sort fix</td>
+            <td>Memory and correctness.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="results">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Current results</h2></div>
+    <p>Every figure below is on the <b>same corpus and window protocol</b>
+    (32,783 MTG mel tracks, 5 seeded windows each, 163,915 window vectors, 121
+    primary labels, chance 0.008), so they are mutually comparable. <code>single</code>
+    = clean-label test tracks only (n = 1,409).</p>
+
+    <div class="scroller">
+      <table>
+        <caption>Config comparison — matched corpus and protocol</caption>
+        <thead>
+          <tr>
+            <th>Config</th>
+            <th class="num">genre<br>primary</th>
+            <th class="num">genre<br>any-tag</th>
+            <th class="num">genre<br>single</th>
+            <th class="num">retrieval<br>top-1</th>
+            <th class="num">collapsed<br>/1000</th>
+            <th class="num">raw intra → inter</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>e16 · λ=5e-2 · 17 ep</td>
+            <td class="num">0.302</td><td class="num">0.416</td><td class="num">0.410</td>
+            <td class="num">0.3453</td><td class="num">50</td>
+            <td class="num">0.9293 → 0.7956</td>
+          </tr>
+          <tr class="hi">
+            <td>e42 · λ=5e-2 · 42 ep</td>
+            <td class="num">0.314</td><td class="num">0.435</td><td class="num">0.425</td>
+            <td class="num best">0.4353</td><td class="num best">42</td>
+            <td class="num">0.9451 → 0.8335</td>
+          </tr>
+          <tr>
+            <td>λ=5e-3 · 17 ep</td>
+            <td class="num">0.311</td><td class="num">0.434</td><td class="num best">0.438</td>
+            <td class="num">0.3553</td><td class="num">70</td>
+            <td class="num">0.9397 → 0.8071</td>
+          </tr>
+          <tr>
+            <td>λ=2e-2 · 17 ep</td>
+            <td class="num">0.313</td><td class="num">0.429</td><td class="num">0.436</td>
+            <td class="num">0.3520</td><td class="num">209</td>
+            <td class="num">0.9526 → 0.8572</td>
+          </tr>
+          <tr>
+            <td><code>n_mels</code>=96 · 17 ep</td>
+            <td class="num">0.305</td><td class="num">0.421</td><td class="num">0.420</td>
+            <td class="num">—</td><td class="num">319&nbsp;<sup>1</sup></td>
+            <td class="num">0.9491 → 0.8610</td>
+          </tr>
+          <tr>
+            <td><b>final100</b> · 100 ep <span class="dot run" style="display:inline-block;vertical-align:middle"></span></td>
+            <td class="num" colspan="6" style="color:var(--ink-3);font-family:'Source Sans 3',sans-serif;font-style:italic">in flight — 68 / 100 epochs</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.88rem;color:var(--ink-3);max-width:68ch"><sup>1</sup> measured
+    over a 3,000-track sample (958 collapsed); all others over 1,000.</p>
+
+    <div class="callout">
+      <h3>Read the collapse counts as indicative, not precise</h3>
+      <p><code>off_diag</code> varied by ~29% between two runs of the
+      <em>identical</em> config (6,181 vs 4,806 at the same epoch), and single-run
+      collapse spanned 42–209 per 1,000. That is why the λ decision leaned on
+      retrieval (1,500 sampled queries, ±0.03 noise) rather than collapse.</p>
+    </div>
+
+    <h3>Whitened gap (intra − inter) by config</h3>
+    <p>e16 <span class="mono">0.386</span> · <b>e42 <span class="mono">0.441</span></b>
+    · λ=5e-3 <span class="mono">0.379</span> · λ=2e-2 <span class="mono">0.417</span>
+    · <code>n_mels</code>=96 <span class="mono">0.394</span></p>
+
+    <h3>Historical baselines — not comparable, kept to show why</h3>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Config</th><th>k-NN genre</th><th>Corpus / labels</th></tr></thead>
+        <tbody>
+          <tr><td>Disjoint windows only</td><td>42–46%</td><td>FMA-era · ~16 labels</td></tr>
+          <tr><td>First augmented run</td><td>≈31%</td><td>FMA-era · ~16 labels</td></tr>
+          <tr><td>Old FMA DB</td><td>0.360 whitened</td><td>7,916 FMA tracks</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Against chance the FMA runs sat at <b>~5.8×</b> (0.360 / 0.0625); the current
+    MTG model is at <b>39–53×</b> (0.314 / 0.008, and 0.410–0.438 on clean labels).
+    The apparent regression was an artefact of an ~8× larger label space plus the
+    <code>tags[0]</code> bug.</p>
+  </section>
+
+  <section id="objective">
+    <div class="sec-head"><span class="sec-num">05</span><h2>The finding that matters</h2></div>
+    <p><code>test_retrieval.py</code> asks the question the model exists to answer:
+    <em>for a 5&nbsp;s window, does its nearest neighbour belong to the same
+    track?</em></p>
+
+    <div class="scroller">
+      <table>
+        <caption>Same-track retrieval · e42 · 1,500 sampled queries</caption>
+        <thead><tr><th>Neighbours</th><th class="num">raw</th><th class="num">whitened</th></tr></thead>
+        <tbody>
+          <tr><td>top-1</td><td class="num">0.4353</td><td class="num">0.4400</td></tr>
+          <tr><td>top-3</td><td class="num">0.5140</td><td class="num">0.5260</td></tr>
+          <tr><td>top-5</td><td class="num">0.5427</td><td class="num">0.5620</td></tr>
+          <tr><td>top-10</td><td class="num">0.5820</td><td class="num">0.6093</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Chance is <span class="mono">2.4e-05</span> — the model is ~18,000× above it,
+    but a Shazam-style fingerprint wants top-1 near <b>1.0</b>. And <b>whitening
+    barely moves it</b>, unlike the intra/inter gap, where whitening transforms the
+    result. That combination is diagnostic: the weakness is not poor conditioning and
+    not any hyperparameter tested. It is structural.</p>
+
+    <div class="callout">
+      <p>Barlow Twins (i) pulls two views of the <em>same</em> track together and
+      (ii) decorrelates <em>dimensions</em>. It never pushes <em>different tracks
+      apart</em>. Redundancy reduction is not instance discrimination — which is why
+      raw inter-track similarity sits at 0.80–0.86 while genre k-NN looks
+      respectable.</p>
+    </div>
+
+    <h3>Levers ruled out, with evidence</h3>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Lever</th><th>Verdict</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Augmentation chain</td>
+            <td><span class="chip dead">dead end</span></td>
+            <td>Removing <b>every</b> content distortion <em>and</em> RRC moves
+            <code>on_diag</code> only 97 → 73 (~25%); λ moves it 40×.
+            <code>instructions.md</code> §8 had named the chain "the remaining knob" —
+            now refuted. <b>No <code>augmenter.py</code> change was made.</b></td>
+          </tr>
+          <tr>
+            <td><code>n_mels</code> 96</td>
+            <td><span class="chip dead">dead end</span></td>
+            <td>Equal to 64 on genre (0.305 vs 0.302), <b>worse</b> raw collapse
+            (0.8610 inter vs 0.7956). The bilinear 96→64 merge costs nothing.</td>
+          </tr>
+          <tr>
+            <td><code>lambd</code></td>
+            <td><span class="chip wash">a wash</span></td>
+            <td>Identical on retrieval at matched epochs; a trade elsewhere —
+            lower λ: +0.03 genre, worse collapse.</td>
+          </tr>
+          <tr>
+            <td><b>Epochs</b></td>
+            <td><span class="chip live">confirmed</span></td>
+            <td>Retrieval 0.35 @ 17 ep → <b>0.435</b> @ 42 ep.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><b>Next lever: the objective.</b> Add a contrastive / InfoNCE term (or
+    VICReg-style variance + invariance) so different tracks are explicitly repelled.
+    After that, LR annealing — since the current schedule has provably never
+    fired.</p>
+  </section>
+
+  <section id="repro">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Reproducing</h2></div>
+<pre><code># score a mel-mode checkpoint (the port this work added)
+nix develop . --command python -m music_encoding.build_chroma \
+    &lt;ckpt&gt;.pt --mel-root ~/mtg_jamendo \
+    --mtg-data ~/mtg-jamendo-dataset/data --n-mels 64
+nix develop . --command python -m music_encoding.test_knn
+nix develop . --command python -m music_encoding.test_similarity_same_song
+nix develop . --command python -m music_encoding.test_retrieval
+nix develop . --command python -m music_encoding.test_network --color genres</code></pre>
+
+    <div class="warn-note">
+      <p><code>--n-mels</code> <b>must match the training run</b>. The conv stack is
+      resolution-agnostic, so a mismatched value runs fine and silently returns wrong
+      numbers — nothing can validate it for you. And do not launch a training run from
+      the repo root unless you intend to replace <code>checkpoints/</code>.</p>
+    </div>
+  </section>
+
+  <section id="status">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Status</h2></div>
+    <ul>
+      <li><b>Complete and verified:</b> the mel-mode eval port, the metadata join, the
+      three metric/labelling corrections, the lever ablations (chain / <code>n_mels</code>
+      / λ), the retrieval metric, and all documentation.</li>
+      <li><b>In flight:</b> the 100-epoch run at λ=5e-2
+      (<code>~/mel_runs/final100/</code>, 68/100). Its DB build and five-eval
+      verification are pending. At e66 it leads the reference run — <code>on_diag</code>
+      356.6 vs 388.7 at e42.</li>
+      <li><b>Recommended next:</b> contrastive objective term, then LR annealing,
+      then re-verify on retrieval + collapse.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Source of record: <code>REPORT.md</code> in the repo, alongside
+    <code>instructions.md</code> §9 (the augmentation/hyperparameter design log) and
+    <code>CLAUDE.md</code>. Numbers in the project memory graph carry the same caveats
+    recorded here.</p>
+  </footer>
+
+</div>

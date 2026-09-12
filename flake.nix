@@ -33,6 +33,9 @@
       {
         devShells.default = pkgs.mkShell {
           packages = [
+
+            pkgs.mcp-server-memory
+            pkgs.mcp-server-filesystem
             python
             pkgs.ty
             pkgs.ruff

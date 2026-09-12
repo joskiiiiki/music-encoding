@@ -1,9 +1,10 @@
 """Shared helpers for reading the Chroma vec DB used by the eval scripts.
 
-Collections (built by build_chroma.py, cosine space):
-  tracks_whitened  — one pooled whitened 128-d embedding per track (+ metadata)
-  tracks_raw       — one pooled raw 128-d embedding per track (+ metadata)
-  windows_raw      — the 5 raw per-window embeddings of each track (+ metadata,
+Collections (built by build_chroma.py, cosine space; D is the encoder's
+`embed_dims`, 128 by default — the projector's z is never stored):
+  tracks_whitened  — one pooled whitened embedding per track (+ metadata)
+  tracks_raw       — one pooled raw embedding per track (+ metadata)
+  windows_raw      — the raw per-window embeddings of each track (+ metadata,
                      `window` key gives the window index; ids track_<idx>_w<k>)
 """
 
@@ -35,11 +36,15 @@ def load_all(
     Returns (ids, embs, metas) with embs a (N, D) float32 array, all ordered by
     (track idx, window) so pooled and window data come back deterministically.
     Pages through the collection: a single get() hits SQLite's variable limit
-    on large collections (windows_raw has ~40k vectors).
+    on large collections (windows_raw holds ~164k vectors over the full corpus).
+
+    Each page is converted to a float32 array as it arrives rather than being
+    accumulated as Python floats — chroma hands back list[list[float]], and at
+    164k x 128 that is ~670 MB of boxed floats on a machine with ~3 GB free.
     """
     col = get_collection(db_dir, name)
     ids: list[str] = []
-    embs: list = []
+    pages: list[np.ndarray] = []
     metas: list = []
     offset = 0
     while True:
@@ -48,17 +53,25 @@ def load_all(
         if not batch:
             break
         ids.extend(batch)
-        embs.extend(data["embeddings"])
+        pages.append(np.asarray(data["embeddings"], dtype=np.float32))
         metas.extend(data["metadatas"])
         offset += _PAGE
 
-    embs = np.asarray(embs, dtype=np.float32)
+    embs = (
+        np.concatenate(pages, axis=0)
+        if pages
+        else np.zeros((0, 0), dtype=np.float32)  # empty collection
+    )
 
-    # ids look like "track_<idx>" or "track_<idx>_w<k>"; sort by (idx, window).
-    parts = [id_.split("_") for id_ in ids]
+    # ids look like "track_<idx>" (pooled) or "track_<idx>_w<k>" (per-window);
+    # sort by (idx, window) so the documented ordering is actually guaranteed.
+    def _key(id_: str) -> tuple[int, int]:
+        p = id_.split("_")
+        win = int(p[2][1:]) if len(p) > 2 and p[2].startswith("w") else 0
+        return int(p[1]), win
+
     sort_key = np.array(
-        [(int(p[1]), int(p[3]) if len(p) > 3 else 0) for p in parts],
-        dtype=[("idx", np.int64), ("win", np.int64)],
+        [_key(i) for i in ids], dtype=[("idx", np.int64), ("win", np.int64)]
     )
     order = np.argsort(sort_key, kind="stable")
     return [ids[i] for i in order], embs[order], [metas[i] for i in order]
