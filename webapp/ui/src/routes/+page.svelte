@@ -4,6 +4,7 @@
 	import { api, type Facets, type SearchResponse, type Stats, type Track } from '$lib/api';
 	import FacetFilter from '$lib/components/FacetFilter.svelte';
 	import TrackRow from '$lib/components/TrackRow.svelte';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
 	const PAGE_SIZE = 50;
 
@@ -96,14 +97,12 @@
 <div class="grid gap-6 pt-4 lg:grid-cols-[260px_1fr]">
 	<aside class="lg:sticky lg:top-4 lg:self-start">
 		<div class="bg-card rounded-lg border px-3 py-2">
-			<label class="flex cursor-pointer items-center gap-2 py-1 text-xs">
-				<input
-					type="checkbox"
-					class="accent-primary size-3"
-					bind:checked={playableOnly}
-				/>
-				<span class="font-medium">Only tracks with audio</span>
-			</label>
+			<div class="flex items-center gap-2 py-1">
+				<Checkbox id="playable-only" bind:checked={playableOnly} />
+				<label for="playable-only" class="cursor-pointer text-xs font-medium">
+					Only tracks with audio
+				</label>
+			</div>
 			<p class="text-muted-foreground pb-1 text-[10px] leading-snug">
 				{stats
 					? `${stats.audio.playable.toLocaleString()} of ${stats.audio.total_tracks.toLocaleString()} playable so far`

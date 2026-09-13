@@ -12,6 +12,7 @@
 	import EnrichmentPanel from '$lib/components/EnrichmentPanel.svelte';
 	import SimilarityGraph from '$lib/components/SimilarityGraph.svelte';
 	import TrackRow from '$lib/components/TrackRow.svelte';
+	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import { player } from '$lib/playerStore.svelte.js';
 
 	const idx = $derived(Number(page.params.idx));
@@ -149,8 +150,12 @@
 		</div>
 
 		{#if graph}
-			<div class="mt-4 grid gap-4 xl:grid-cols-[1fr_320px]">
-				<div class={focus ? 'bg-background fixed inset-0 z-50 overflow-auto p-4' : ''}>
+			{#snippet panel(g: GraphResponse)}
+				<!-- One wrapper element on purpose: a snippet with two roots renders as two
+				     nodes, and inside the grid below each would become its own cell -- which
+				     puts the controls in the 1fr column and squeezes the graph into the
+				     sidebar column. -->
+				<div>
 					<div class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
 						{#if focus}
 							<button
@@ -207,13 +212,27 @@
 					</div>
 
 					<SimilarityGraph
-						{graph}
+						graph={g}
 						{minSim}
 						{colorBy}
 						onReseed={reseed}
 						height={focus ? 700 : 520}
 					/>
 				</div>
+			{/snippet}
+
+			<div class="mt-4 grid gap-4 xl:grid-cols-[1fr_320px]">
+				{#if focus}
+					<!-- Focus mode is the one container with a viewport-sized scroll, so it
+					     gets the same ScrollArea as the lists rather than a default bar. -->
+					<div class="bg-background fixed inset-0 z-50 p-4">
+						<ScrollArea class="h-[calc(100dvh-2rem)]" type="always">
+							{@render panel(graph)}
+						</ScrollArea>
+					</div>
+				{:else}
+					{@render panel(graph)}
+				{/if}
 
 				<div class="space-y-4">
 					<EnrichmentPanel enrichment={graph.enrichment} k={graph.nodes.length - 1} />
@@ -223,11 +242,13 @@
 							<h3 class="text-sm font-medium">Similar tracks</h3>
 							<span class="text-muted-foreground text-xs">cosine</span>
 						</div>
-						<div class="max-h-[520px] overflow-y-auto">
+						<!-- max-h rather than h: `k` is adjustable down to 5, and a fixed height
+						     would leave a large empty panel under a short list. -->
+						<ScrollArea class="max-h-[520px]" type="always">
 							{#each neighbours as neighbour, index (neighbour.idx)}
 								<TrackRow track={neighbour} rank={index + 1} compact />
 							{/each}
-						</div>
+						</ScrollArea>
 					</div>
 
 					<p class="text-muted-foreground text-[11px] leading-snug">

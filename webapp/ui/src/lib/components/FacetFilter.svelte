@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { FacetValue } from '$lib/api';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 
 	let {
 		title,
@@ -27,6 +29,9 @@
 				? values
 				: values.slice(0, limit)
 	);
+
+	// An id has to be whitespace-free, and tag values are data rather than slugs.
+	const domId = (value: string) => `facet-${title}-${value.replace(/[^a-z0-9]+/gi, '-')}`;
 
 	function toggle(value: string) {
 		onselect(
@@ -58,25 +63,36 @@
 		/>
 	{/if}
 
-	<div class="max-h-56 space-y-0.5 overflow-y-auto pr-1">
-		{#each filtered as value (value.value)}
-			<label
-				class="hover:bg-muted flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs"
-			>
-				<input
-					type="checkbox"
-					class="accent-primary size-3"
-					checked={selected.includes(value.value)}
-					onchange={() => toggle(value.value)}
-				/>
-				<span class="flex-1 truncate" title={value.value}>{value.value}</span>
-				<span class="text-muted-foreground tabular-nums">{value.count}</span>
-			</label>
-		{/each}
-		{#if !filtered.length}
-			<p class="text-muted-foreground px-1.5 py-1 text-xs">no match</p>
-		{/if}
-	</div>
+	<!-- type="always": bits-ui defaults to "hover", which mounts the scrollbar only while
+	     the pointer is over the area -- in a filter rail that reads as a list cut off with
+	     no indication there is more of it. -->
+	<ScrollArea class="h-56" type="always">
+		<div class="space-y-0.5 pr-3">
+			{#each filtered as value (value.value)}
+				<div class="hover:bg-muted flex items-center gap-2 rounded px-1.5 py-1">
+					<!-- The label is a sibling pointing at the checkbox by id, not a wrapper:
+					     bits-ui renders the checkbox as a <button>, and a label wrapping a
+					     button does not forward clicks to it. -->
+					<Checkbox
+						id={domId(value.value)}
+						checked={selected.includes(value.value)}
+						onCheckedChange={() => toggle(value.value)}
+					/>
+					<label
+						for={domId(value.value)}
+						class="flex-1 cursor-pointer truncate text-xs"
+						title={value.value}
+					>
+						{value.value}
+					</label>
+					<span class="text-muted-foreground text-xs tabular-nums">{value.count}</span>
+				</div>
+			{/each}
+			{#if !filtered.length}
+				<p class="text-muted-foreground px-1.5 py-1 text-xs">no match</p>
+			{/if}
+		</div>
+	</ScrollArea>
 
 	{#if !query && values.length > limit}
 		<button
