@@ -7,12 +7,13 @@
 	import SkipForward from '@lucide/svelte/icons/skip-forward';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { formatDuration } from '$lib/api';
 	import { player } from '$lib/playerStore.svelte.js';
 	import AudioBadge from './AudioBadge.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import { Slider } from '$lib/components/ui/slider/index.js';
 
 	const total = $derived(player.duration || player.track?.duration || 0);
@@ -50,6 +51,44 @@
 	});
 
 	let trailCollapsed = $state(false);
+
+	// Trail scrolling, driven by the arrow buttons rather than a scrollbar.
+	let trailEl = $state<HTMLDivElement | null>(null);
+	let canScrollBack = $state(false);
+	let canScrollForward = $state(false);
+
+	function nudgeTrail(direction: -1 | 1) {
+		if (!trailEl) return;
+		// Most of a viewport per press, so a long chain takes a few clicks rather than dozens.
+		const step = Math.max(140, trailEl.clientWidth * 0.7);
+		trailEl.scrollBy({ left: direction * step, behavior: 'smooth' });
+	}
+
+	/** Recompute the arrows, and optionally follow the walk to the newest step. */
+	function syncTrail(el: HTMLElement, follow: boolean) {
+		if (follow && el.scrollWidth > el.clientWidth) {
+			// Only follow if the chain is already at the end, so a new step cannot yank the
+			// view away from an earlier part of the trail being read.
+			const pinned = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
+			if (pinned) el.scrollLeft = el.scrollWidth;
+		}
+		canScrollBack = el.scrollLeft > 1;
+		canScrollForward = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+	}
+
+	// Drive the arrows from the geometry itself. A Svelte *action* rather than an effect:
+	// actions are guaranteed to run when their element is created, whereas an effect keyed
+	// on the trail's length did not re-run as the chain grew (and neither did a
+	// ResizeObserver created inside one). Observing the scroller and the chip row covers
+	// both cases that matter -- the chain getting longer, and the window changing width.
+	function trailSync(node: HTMLElement) {
+		const inner = node.firstElementChild as HTMLElement | null;
+		const observer = new ResizeObserver(() => syncTrail(node, true));
+		observer.observe(node);
+		if (inner) observer.observe(inner);
+		syncTrail(node, true);
+		return { destroy: () => observer.disconnect() };
+	}
 </script>
 
 {#if player.track}
@@ -198,13 +237,30 @@
 						     the numbers show how similarity decays as the walk drifts; clicking one
 						     rewinds the walk to that point.
 
-						     The explicit height is load-bearing: the scrollbar is drawn over the
-						     bottom of the viewport, and the root otherwise sizes itself to the chips,
-						     leaving zero clearance so the bar lands on the text. 26px holds an 18px
-						     chip row plus a strip for the bar; `items-start` keeps the chips at the
-						     top of that strip. -->
-						<ScrollArea class="h-[26px] min-w-0 flex-1" orientation="horizontal">
-							<div class="flex items-start gap-1 pr-3">
+						     Scrolled with the two arrow buttons rather than a scrollbar: a bar is
+						     drawn over the bottom of the viewport here, which forced the row taller
+						     than the chips needed and still landed on the text. The scroller is
+						     `overflow-x: auto` with its scrollbar hidden, so the arrows are the only
+						     affordance and the row sizes to the chips. -->
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							class="shrink-0"
+							disabled={!canScrollBack}
+							onclick={() => nudgeTrail(-1)}
+							aria-label="Scroll back through the walk"
+						>
+							<ChevronLeft />
+						</Button>
+						<div
+							class="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+							bind:this={trailEl}
+							use:trailSync
+							onscroll={(event) => syncTrail(event.currentTarget, false)}
+							data-can-back={canScrollBack}
+							data-can-forward={canScrollForward}
+						>
+							<div class="flex w-max items-center gap-1">
 								{#each player.trail as step, index (step.idx)}
 									{#if index > 0}
 										<span class="text-muted-foreground shrink-0 text-[10px]">→</span>
@@ -237,7 +293,17 @@
 									</span>
 								{/if}
 							</div>
-						</ScrollArea>
+						</div>
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							class="shrink-0"
+							disabled={!canScrollForward}
+							onclick={() => nudgeTrail(1)}
+							aria-label="Scroll forward through the walk"
+						>
+							<ChevronRight />
+						</Button>
 					{/if}
 				</div>
 			</div>
