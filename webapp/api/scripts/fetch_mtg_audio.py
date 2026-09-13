@@ -129,13 +129,19 @@ def main() -> int:
     args.dest.mkdir(parents=True, exist_ok=True)
     hashes = expected_hashes()
     wanted = [args.only] if args.only is not None else buckets_needed()
-    leftovers = sorted(args.dest.glob("*.tarc*")) + sorted(args.dest.glob("*.part"))
-    for stale in leftovers:
+
+    # Only the old gdown-style temp names are junk. `*.part` files are *deliberately*
+    # kept: `fetch()` downloads to `<name>.part` and curl's `-C -` resumes it, so
+    # deleting them here would throw away a partially-downloaded archive and make a
+    # killed run start that bucket from zero.
+    for stale in sorted(args.dest.glob("*.tarc*")):
         print(
-            f"removing stale partial: {stale.name} "
-            f"({stale.stat().st_size / 1e6:.0f} MB)"
+            f"removing stale temp: {stale.name} ({stale.stat().st_size / 1e6:.0f} MB)"
         )
         stale.unlink()
+    for part in sorted(args.dest.glob("*.part")):
+        already = part.stat().st_size / 1e9
+        print(f"resuming partial: {part.name} ({already:.2f} GB already)")
 
     free = shutil.disk_usage(args.dest).free
     print(f"destination : {args.dest}")
