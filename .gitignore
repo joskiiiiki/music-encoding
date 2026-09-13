@@ -15,8 +15,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored: these ignore the vendored pyvis JS at the repo root only. Unanchored,
+# `lib/` also swallowed webapp/ui/src/lib/ — SvelteKit's canonical library dir.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -237,3 +239,13 @@ chroma_db/
 # MCP memory server knowledge graph (local, accumulated per-machine)
 .claude/memory.json
 .claude/memory.json.lock
+
+# Claude Code worktrees are created inside the repo
+.claude/worktrees/
+
+# Web app (webapp/) — deps and build output. Note the repo-wide `*.png` and `*.csv`
+# rules above also apply under webapp/, so frontend assets are SVG, not PNG.
+webapp/ui/node_modules/
+webapp/ui/.svelte-kit/
+webapp/ui/build/
+webapp/data/

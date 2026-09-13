@@ -44,6 +44,7 @@ Time stability comes from pairing two different windows of the *same* track as p
 | `train_log_*.csv` / `logs/` | Training metrics (`epoch,lr,loss,on_diag,off_diag`) |
 | `instructions.md` | Notes on the augmentation & hyperparameter changes (read before touching augmenters) |
 | `plot_log.py` | Plots a train log CSV → `log.png` |
+| `webapp/` | **The web app** — browse/search the corpus, play a track, walk its similarity graph. Its own `README.md`; `webapp/api` (FastAPI, reads exported artifacts) + `webapp/ui` (SvelteKit). See the section below |
 
 ## Key files
 
@@ -233,6 +234,44 @@ promoted into `chroma_db/`, so every eval runs with no arguments. Retrieval vs s
 help further (`instructions.md` §12).
 
 Desired direction for the fingerprinting use case: **lower inter-track mean with wider std** (less embedding-space collapse) while keeping intra-track high. Track new results as (checkpoint config → both eval numbers).
+
+## Web app (`webapp/`)
+
+A local SvelteKit + FastAPI app over the same embeddings: search the corpus, play a track, walk
+its similarity graph. `webapp/README.md` has the run instructions; the load-bearing facts:
+
+- **Strictly separated from the model.** `webapp/api/scripts/export_index.py` is the *only*
+  thing that imports `music_encoding` (plus `chromadb`, for `load_all`). It writes
+  `webapp/data/catalog.sqlite` (metadata + FTS5 index + facet tables) and `vectors.npz`
+  (whitened + raw, unit-normalised, ordered by `idx`). After that the API needs **numpy and
+  sqlite only** — no torch, no chromadb, no checkpoint, no GPU.
+- **Similarity is exact, not approximate.** The whole matrix is 32,783×128 float32 (17 MB per
+  space), so `X @ X[i]` is ~2 ms and returns the true top-k. `verify_export.py` checks it
+  reproduces chroma's own neighbours (top-1 40/40, mean top-10 overlap 0.997) — that is the test
+  that would catch a transposed or misordered export, which nothing else would.
+- ⚠️ **`col.get(ids=[...])` returns rows sorted by id, NOT in the requested order.** Zipping its
+  output against the request list silently pairs every seed with the wrong embedding. This
+  produced a wrong number that briefly went into this file: an enrichment of 1.15×/1.9×, where
+  the truth (keyed by id, and reproduced independently through chroma's HNSW) is **3.96× genre /
+  138× same-artist** at k=6. The 138× agrees with `test_retrieval.py`'s independent 149× lift.
+- **The graph's enrichment compares against the corpus, not a within-graph label shuffle.** A
+  permutation null is right for `test_network.py`, which *samples* the corpus and then derives
+  edges; it is wrong for a seed-centred ego-graph, because the node set is chosen *by* similarity
+  to the seed, so shuffling labels inside it leaves the enrichment in place. Measured: tracks 0-7
+  are all David TMX and 61% of their top-20 neighbours share the artist, yet the within-graph lift
+  read **0.8×** — below chance. `webapp/api/app/enrichment.py` explains this at length.
+- **Audio is the constrained part.** 586 tracks (1.8%) play from `~/mtg/raw_30s_audio-low-00.tar`
+  by byte-range through a tar-header index (nothing is unpacked); ~28% of the rest resolve to a
+  Deezer/iTunes 30s preview, which is a *different recording*, so the player labels it and offers
+  "not it?". Playback is optional everywhere rather than broken.
+- ⚠️ **Deezer reports its rate limit as HTTP 200** with `{"error": {"message": "Quota limit
+  exceeded"}}`. Reading only `data` cannot distinguish that from a genuine miss, and a miss is
+  cached forever: a first warm run at 10 workers recorded 12,512 tracks as permanently
+  unavailable at an 8% hit rate where a random sample gives ~28%. Those rows were purged. A
+  refusal is now retried and never written, `provider="none"` requires *every* provider to have
+  answered, and one shared limiter caps lookups at 4/s (`WEBAPP_PREVIEW_RATE`).
+- `.gitignore` anchors the vendored `/lib/` rule — unanchored it also matched SvelteKit's
+  `src/lib/`, which would have silently dropped the frontend's library directory from git.
 
 ## Decisions that matter (do not "simplify")
 

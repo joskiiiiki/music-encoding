@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		<script>
+			// Follow the OS theme by toggling `.dark`, which is what the token block in
+			// app.css keys off. Inline and before paint so there is no flash of the wrong
+			// theme, and read by SimilarityGraph for its canvas palette.
+			(() => {
+				const media = matchMedia('(prefers-color-scheme: dark)');
+				const apply = () => document.documentElement.classList.toggle('dark', media.matches);
+				apply();
+				media.addEventListener('change', apply);
+			})();
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
