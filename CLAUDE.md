@@ -272,6 +272,17 @@ its similarity graph. `webapp/README.md` has the run instructions; the load-bear
   to the seed, so shuffling labels inside it leaves the enrichment in place. Measured: tracks 0-7
   are all David TMX and 61% of their top-20 neighbours share the artist, yet the within-graph lift
   read **0.8×** — below chance. `webapp/api/app/enrichment.py` explains this at length.
+- **Searching outside the corpus is a separate torch process.** `webapp/embedder/service.py`
+  (default shell, port 8100) embeds a Deezer/iTunes preview with the *reused* `front_end` and
+  `embed_preview` from `compare_songs`, so a query goes through the same 96-mel @ 24 kHz slaney
+  pipeline and 5-window pooling the corpus was built with; the API stays torch-free and answers
+  503 if the sidecar is not running. Verified by embedding a track's own mp3: mean cosine
+  **0.991** to its stored vector, matching the ~0.987 `CLAUDE.md` quotes for audio-vs-`.npy`.
+  ⚠️ **Queries are ranked in the RAW space, never whitened** — whitening amplifies the
+  low-variance directions (50x eigenvalue spread, clipped at 1e-4 → up to 100x), so a query's
+  ~1% error lands near-orthogonal: measured raw 0.987–0.994 vs whitened **-0.007–0.264** on
+  the same three tracks. Provider search is also loose (Deezer's top hit for `MFYM` is
+  "50 Cent — Many Men"), so merged results are re-ranked on artist/title overlap.
 - **Audio comes from MTG, not from previews.** `raw_30s/audio-low` is published as one tar per
   `track_num % 100` bucket; our corpus spans 59 of them and the buckets are a *representative*
   slice (bucket 00's genre shares match the corpus within 1.4 pp). `fetch_mtg_audio.py` pulls what

@@ -78,6 +78,17 @@ def chroma_db_dir() -> Path:
     return _REPO_ROOT / "chroma_db"
 
 
+def embedder_url() -> str:
+    """The torch sidecar that turns external audio into embeddings.
+
+    Separate process on purpose: embedding needs the checkpoint and MTG's mel front end,
+    so it lives in ``webapp/embedder`` and runs in the default shell (the one with
+    torch),
+    while this API stays on numpy and sqlite in the light ``.#web`` shell.
+    """
+    return os.environ.get("WEBAPP_EMBEDDER", "http://127.0.0.1:8100")
+
+
 def mtg_data_dir() -> Path:
     """MTG-Jamendo's ``data/`` directory (the TSVs)."""
     return _env_path("MTG_DATA_DIR") or Path.home() / "mtg-jamendo-dataset" / "data"

@@ -8,9 +8,11 @@ neighbours as a graph you can walk (click a node to recentre).
 webapp/
 ├── data/            generated artifacts (gitignored) -- catalog.sqlite, vectors.npz, audio.sqlite
 ├── api/             FastAPI backend: reads the artifacts, serves JSON + audio
-│   ├── app/         paths, index (search + exact k-NN + graph), enrichment, previews, audio
+│   ├── app/         paths, index (search + exact k-NN + graph), enrichment, previews, audio,
+│   │                external (search Deezer/iTunes and embed the result)
 │   └── scripts/     export_index, verify_export, check_api, local_audio_index,
-│                    warm_previews, measure_enrichment
+│                    warm_previews, measure_enrichment, fetch_mtg_audio, check_audio_index
+├── embedder/        torch sidecar: turns an audio URL into a corpus embedding
 └── ui/              SvelteKit + Tailwind + shadcn-svelte frontend
 ```
 
@@ -59,7 +61,14 @@ cd webapp/api && nix develop ../..#web --command uvicorn app.main:app --reload -
 
 # terminal 2 -- UI on :5173 (proxies /api to the API)
 cd webapp/ui && nix develop ../..#web --command pnpm dev
+
+# terminal 3 -- OPTIONAL: the embedder on :8100, only for searching Deezer/iTunes
+# (default shell: this one has torch). Everything else works without it.
+nix develop --command python webapp/embedder/service.py
 ```
+
+The embedder is optional and only needed for the external search below; without it that
+one feature answers 503 and says so, and the rest of the app is unaffected.
 
 Then open <http://localhost:5173>. Proxying `/api` keeps the browser on one origin, so there is
 no CORS and the `<audio>` element can issue Range requests against the same host.
@@ -74,6 +83,8 @@ no CORS and the `<audio>` element can issue Range requests against the same host
 | `MTG_AUDIO_DIR` | `~/mtg` | directory of `raw_30s_audio-low-NN.tar` archives |
 | `WEBAPP_API` | `http://127.0.0.1:8000` | proxy target for the UI dev server |
 | `WEBAPP_PREVIEW_RATE` | `4` | preview lookups per second, shared across all warm workers |
+| `WEBAPP_EMBEDDER` | `http://127.0.0.1:8100` | the torch sidecar, for external search |
+| `EMBEDDER_CHECKPOINT` | `~/mel_runs/cont1000/checkpoints/checkpoint_e1000.pt` | model the sidecar loads |
 
 Paths default sensibly and the API derives the chroma path from `git rev-parse
 --git-common-dir`, so it finds the real `chroma_db/` even when the app runs from a linked git
@@ -157,6 +168,40 @@ quota. With iTunes in the loop, 59 of every 100 tracks came back as refusals and
 corpus). `--provider itunes --refresh` runs the tail separately if wanted. One shared limiter
 caps lookups at 4 req/s (`WEBAPP_PREVIEW_RATE`), because the quota is per-IP and a wider worker
 pool only trips it sooner.
+
+## Searching outside the corpus
+
+Type in the search box and the app also asks Deezer (then iTunes); the results appear under
+"Not in the corpus". Clicking one embeds that preview with MTG's own mel front end and shows
+the nearest tracks the corpus *does* have, rendered exactly like a corpus track's page.
+
+**It is a separate process** (`webapp/embedder`, default shell, port 8100) because embedding
+needs torch and the checkpoint, and the API is deliberately torch-free. Nothing about the
+front end is reimplemented: `front_end` and `embed_preview` come from
+`music_encoding.compare_songs`, so the query goes through the same 96-mel @ 24 kHz slaney
+pipeline and the same 5-window pooling the corpus was built with.
+
+Verified: embedding a track's *own* mp3 and ranking it against the corpus returns that track
+-- mean cosine 0.991 to its stored vector, matching the ~0.987 `CLAUDE.md` quotes for the
+audio-vs-`.npy` path. Embedding takes 200-570 ms, so a query is a sub-second round trip.
+
+Two measured constraints shape it:
+
+* **Ranking is in the raw space, never whitened.** Whitening a *corpus* vector is right --
+  it spreads the cloud -- but whitening a *query* destroys it: ZCA amplifies the
+  low-variance directions (50x eigenvalue spread, clipped at 1e-4, so up to 100x
+  amplification), so a query's own ~1% embedding error lands near-orthogonal. Measured on
+  three tracks ranked against their own corpus embeddings: raw 0.987-0.994, whitened
+  -0.007-0.264.
+* **Provider search is loose, so results are re-ranked by match quality.** Deezer's top hit
+  for `MFYM` is "50 Cent — Many Men (Wish Death)"; iTunes returns the actual Mfym tracks.
+  Sorting merged results on artist/title overlap floats the real matches up.
+
+Quality against a corpus track is lower, and honestly so: a preview is a *different
+recording* (usually the hook), so the query vector sits further from the corpus than a
+corpus vector does. It still discriminates -- querying with a Deezer preview of Podington
+Bear's "Dry Air" put **6 of its top 10** neighbours on that artist, against ~0.3% for a
+random corpus track. Expect that, not corpus-grade precision, and the page says so.
 
 ## Notes for anyone changing this
 

@@ -21,7 +21,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .index import get_catalog
-from .routers import audio, catalog, graph
+from .routers import audio, catalog, external, graph
 
 
 @asynccontextmanager
@@ -64,6 +64,7 @@ api = APIRouter(prefix="/api")
 api.include_router(catalog.router)
 api.include_router(graph.router)
 api.include_router(audio.router)
+api.include_router(external.router)
 app.include_router(api)
 
 

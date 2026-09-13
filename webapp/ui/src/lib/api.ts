@@ -138,6 +138,40 @@ async function get<T>(path: string, params: Params = {}): Promise<T> {
 	return (await response.json()) as T;
 }
 
+export interface ExternalResult {
+	provider: 'deezer' | 'itunes';
+	id: string;
+	title: string;
+	artist: string;
+	album: string;
+	/** The provider's 30s preview mp3 — a different recording of the song. */
+	preview_url: string;
+	artwork: string;
+	seconds: number | null;
+}
+
+export interface ExternalSearch {
+	query: string;
+	provider: string;
+	results: ExternalResult[];
+}
+
+export interface ExternalSimilar {
+	query: {
+		provider: string;
+		id: string | null;
+		title: string;
+		artist: string;
+		preview_url: string | null;
+		audio_seconds: number | null;
+		embed_ms: number | null;
+	};
+	/** Always 'raw': whitening a query embedding destroys it. See api/app/external.py. */
+	space: string;
+	note: string;
+	items: Track[];
+}
+
 export interface SearchParams {
 	q?: string;
 	genre?: string[];
@@ -160,6 +194,23 @@ export const api = {
 	graph: (seed: number, k = 20, space: Space = 'whitened', minSim = 0) =>
 		get<GraphResponse>('/api/graph', { seed, k, space, min_sim: minSim }),
 	stats: () => get<Stats>('/api/stats'),
+
+	/** Songs the corpus does not contain, searched on Deezer/iTunes. */
+	externalSearch: (q: string, limit = 8) =>
+		get<ExternalSearch>('/api/external/search', { q, limit }),
+
+	/**
+	 * The corpus tracks nearest to an outside song. Needs the torch sidecar
+	 * (webapp/embedder), so it answers 503 when that is not running.
+	 */
+	externalSimilar: (params: {
+		preview_url: string;
+		provider: string;
+		id?: string;
+		title?: string;
+		artist?: string;
+		k?: number;
+	}) => get<ExternalSimilar>('/api/external/similar', params as Params),
 
 	/** Same-origin URL for the audio element; the API streams or proxies from here. */
 	audioUrl: (idx: number) => `/api/tracks/${idx}/audio`,

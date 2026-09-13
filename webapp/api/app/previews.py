@@ -256,6 +256,94 @@ def resolve(artist: str, title: str, provider: str = "auto") -> dict:
     return {"provider": "none", "url": None, "tried": tried}
 
 
+def browse_deezer(query: str, limit: int = 8) -> list[dict]:
+    """Search Deezer for arbitrary text and return every usable candidate.
+
+    Note the difference from :func:`search_deezer`: that resolves *a known corpus track*
+    and must refuse a title-only match, because caching a wrong song as "the" audio for
+    corpus track is a lie. Here the user typed the query themselves, so the provider's
+    results are simply what they asked for and no artist filter applies.
+    """
+    url = "https://api.deezer.com/search?" + urllib.parse.urlencode(
+        {"q": query, "limit": limit}
+    )
+    data, error = _get_json(url)
+    if error or not data:
+        return []
+    out = []
+    for cand in data.get("data") or []:
+        if not cand.get("preview"):
+            continue
+        out.append(
+            {
+                "provider": "deezer",
+                "id": str(cand.get("id") or ""),
+                "title": cand.get("title") or "",
+                "artist": (cand.get("artist") or {}).get("name") or "",
+                "album": (cand.get("album") or {}).get("title") or "",
+                "preview_url": cand["preview"],
+                "artwork": (cand.get("album") or {}).get("cover_small") or "",
+                "seconds": cand.get("duration"),
+            }
+        )
+    return out
+
+
+def browse_itunes(query: str, limit: int = 8) -> list[dict]:
+    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+        {"term": query, "entity": "song", "limit": limit}
+    )
+    data, error = _get_json(url)
+    if error or not data:
+        return []
+    out = []
+    for cand in data.get("results") or []:
+        if not cand.get("previewUrl"):
+            continue
+        out.append(
+            {
+                "provider": "itunes",
+                "id": str(cand.get("trackId") or ""),
+                "title": cand.get("trackName") or "",
+                "artist": cand.get("artistName") or "",
+                "album": cand.get("collectionName") or "",
+                "preview_url": cand["previewUrl"],
+                "artwork": cand.get("artworkUrl60") or "",
+                "seconds": (cand.get("trackTimeMillis") or 0) / 1000 or None,
+            }
+        )
+    return out
+
+
+def _relevance(query: str, result: dict) -> tuple[int, int]:
+    """How well a result matches what was typed: (artist overlap, any-field overlap)."""
+    want = set(_norm(query).split())
+    artist = set(_norm(result.get("artist")).split())
+    fields = artist | set(_norm(result.get("title")).split())
+    return len(want & artist), len(want & fields)
+
+
+def browse(query: str, provider: str = "auto", limit: int = 8) -> list[dict]:
+    """Provider search for the app's search box: Deezer first, then iTunes.
+
+    Merged results are **re-ranked by how well they match the query** rather than kept
+    provider order, because provider search is loose: Deezer's top hit for "MFYM" is
+    "50 Cent — Many Men (Wish Death)" while iTunes correctly returns Mfym. Sorting
+    on artist overlap floats the real matches up; ties keep provider order.
+    """
+    from itertools import islice
+
+    if provider == "deezer":
+        merged = browse_deezer(query, limit)
+    elif provider == "itunes":
+        merged = browse_itunes(query, limit)
+    else:
+        merged = browse_deezer(query, limit) + browse_itunes(query, limit)
+    # Stable sort: equal relevance keeps Deezer's (usually better) ordering.
+    ranked = sorted(merged, key=lambda r: _relevance(query, r), reverse=True)
+    return list(islice(ranked, limit * 2))
+
+
 def open_stream(url: str, range_header: str | None = None):
     """Open a preview URL for proxying, forwarding a Range request if given.
 

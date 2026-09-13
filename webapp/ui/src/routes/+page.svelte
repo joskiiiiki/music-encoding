@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, type Facets, type SearchResponse, type Stats, type Track } from '$lib/api';
+	import {
+		api,
+		type ExternalSearch,
+		type Facets,
+		type SearchResponse,
+		type Stats,
+		type Track
+	} from '$lib/api';
 	import FacetFilter from '$lib/components/FacetFilter.svelte';
 	import TrackRow from '$lib/components/TrackRow.svelte';
 	import { Alert, AlertDescription } from '$lib/components/ui/alert/index.js';
@@ -104,6 +111,42 @@
 		void api.facets().then((value) => (facets = value));
 		void api.stats().then((value) => (stats = value));
 	});
+
+	// Songs the corpus does not have, searched on Deezer/iTunes. A separate, slower
+	// debounce than the corpus search: these are third-party calls with rate limits, and
+	// there is no reason to ask on every keystroke of a one-letter query.
+	let external = $state<ExternalSearch | null>(null);
+	let externalLoading = $state(false);
+	let externalTimer: ReturnType<typeof setTimeout> | undefined;
+
+	$effect(() => {
+		const query = q.trim();
+		clearTimeout(externalTimer);
+		if (query.length < 3) {
+			external = null;
+			return;
+		}
+		externalTimer = setTimeout(() => {
+			externalLoading = true;
+			api
+				.externalSearch(query, 6)
+				.then((value) => (external = value))
+				.catch(() => (external = null))
+				.finally(() => (externalLoading = false));
+		}, 600);
+		return () => clearTimeout(externalTimer);
+	});
+
+	function externalHref(result: ExternalSearch['results'][number]) {
+		const params = new URLSearchParams({
+			provider: result.provider,
+			id: result.id,
+			title: result.title,
+			artist: result.artist,
+			preview_url: result.preview_url
+		});
+		return `/external?${params}`;
+	}
 
 	const activeFilters = $derived(
 		genres.length + instruments.length + moods.length + (playableOnly ? 1 : 0)
@@ -226,6 +269,44 @@
 					{/if}
 				</AlertDescription>
 			</Alert>
+		{/if}
+
+		{#if external && external.results.length}
+			<!-- Outside songs. Clicking one embeds its preview and shows the nearest tracks
+			     the corpus does have, which is the whole point of the space. -->
+			<Card class="mt-3 gap-0 py-3">
+				<CardContent class="px-3">
+					<div class="mb-2 flex flex-wrap items-baseline gap-x-2">
+						<h3 class="text-sm font-medium">Not in the corpus — Deezer / iTunes</h3>
+						<span class="text-muted-foreground text-xs">
+							click one to find its nearest tracks here
+						</span>
+					</div>
+					<div class="space-y-0.5">
+						{#each external.results as result (result.provider + result.id)}
+							<a
+								href={externalHref(result)}
+								class="hover:bg-muted flex items-center gap-2 rounded px-1.5 py-1"
+							>
+								<span class="text-muted-foreground w-12 shrink-0 text-[10px] uppercase">
+									{result.provider}
+								</span>
+								<span class="min-w-0 flex-1 truncate text-xs">
+									<span class="font-medium">{result.title}</span>
+									— {result.artist}{#if result.album} · {result.album}{/if}
+								</span>
+								{#if result.seconds}
+									<span class="text-muted-foreground shrink-0 text-[10px] tabular-nums">
+										{Math.round(result.seconds)}s
+									</span>
+								{/if}
+							</a>
+						{/each}
+					</div>
+				</CardContent>
+			</Card>
+		{:else if externalLoading && q.trim().length >= 3}
+			<Skeleton class="mt-3 h-16 w-full rounded-lg" />
 		{/if}
 
 		{#if items.length}
