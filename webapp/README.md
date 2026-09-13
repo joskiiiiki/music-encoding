@@ -30,17 +30,24 @@ nix develop --command python webapp/api/scripts/export_index.py
 #    ...and check it reproduces chroma's own neighbours
 nix develop --command python webapp/api/scripts/verify_export.py
 
-# 2. Index the local audio (optional but recommended: 586 full tracks)
+# 2. Fetch the corpus's OWN audio (the primary source -- see "Audio" below)
+nix develop .#web --command python webapp/api/scripts/fetch_mtg_audio.py --dest ~/mtg
 nix develop .#web --command python webapp/api/scripts/local_audio_index.py
 
-# 3. Pre-resolve previews so coverage is known upfront (optional, ~2.2 h measured, resumable)
+# 3. Previews, only as a fallback for buckets whose audio is not downloaded yet
 nix develop .#web --command python webapp/api/scripts/warm_previews.py --workers 6
 ```
 
 `export_index.py` writes `catalog.sqlite` (metadata + FTS5 index + facet tables) and
 `vectors.npz` (whitened + raw, unit-normalised, ordered by `idx`). Re-run it after training a
-new checkpoint; the preview cache lives in a **separate** `audio.sqlite` so a re-export can
-never wipe hours of warming.
+new checkpoint; the audio cache lives in a **separate** `audio.sqlite` so a re-export can
+never wipe a long download or warm run.
+
+`fetch_mtg_audio.py` pulls MTG's own archives (~1.7 GB each, sha256-verified against MTG's
+published list, resumable) and **stops before it fills the disk** — the full corpus is 98.5 GB
+and this box has far less free than that, so it fetches what fits. Re-run it any time to
+continue; `local_audio_index.py` is idempotent, so fetch-then-index can be repeated as space
+appears.
 
 ## Running
 
@@ -62,7 +69,7 @@ no CORS and the `<audio>` element can issue Range requests against the same host
 | `WEBAPP_CHROMA_DB` | main checkout's `chroma_db/` | source DB for the exporter |
 | `WEBAPP_DATA_DIR` | `webapp/data` | where the artifacts live |
 | `MTG_DATA_DIR` | `~/mtg-jamendo-dataset/data` | the MTG TSVs (durations) |
-| `MTG_AUDIO_TAR` | `~/mtg/raw_30s_audio-low-00.tar` | local audio slice |
+| `MTG_AUDIO_DIR` | `~/mtg` | directory of `raw_30s_audio-low-NN.tar` archives |
 | `WEBAPP_API` | `http://127.0.0.1:8000` | proxy target for the UI dev server |
 | `WEBAPP_PREVIEW_RATE` | `4` | preview lookups per second, shared across all warm workers |
 
@@ -104,23 +111,32 @@ the panel says so rather than showing an error.
 
 ## Audio: read this before trusting playback
 
-Two sources, and neither covers everything:
+Two sources. **Use the first one** — the second is a fallback and is inherently unreliable.
 
-* **Local** — 586 of 32,783 tracks (1.8%) exist as mp3s inside
-  `~/mtg/raw_30s_audio-low-00.tar`. These are served by seeking into the archive using an index
-  of member byte offsets, so nothing is unpacked. This is the *actual* audio the embedding came
-  from.
-* **Preview** — resolved from artist + title via Deezer (iTunes as an optional second pass). MTG-
-  Jamendo is royalty-free and largely absent from those services. A completed full pass resolved
-  **5,918 tracks (18% of the 32,197 that are not local)**; a 40-track random sample had suggested
-  28%, which is a reminder of how wide the interval is at n=40. In total **6,518 of 32,783 tracks
-  (20%) are playable** and 26,265 are confirmed unavailable. Deezer is the default for a measured
-  reason — see the pre-warm note below. A preview is also **a different recording** of the song
-  matched by fuzzy text search, so the player labels it and offers "not it?" to re-resolve.
+* **MTG's own audio (primary).** MTG publishes `raw_30s/audio-low` as 100 tar archives named
+  `raw_30s_audio-low-NN.tar`, one per bucket of `track_num % 100`. Our corpus spans 59 of those
+  buckets, and the buckets are a *representative* slice — bucket 00's genre shares match the
+  corpus within 1.4 pp — so the first N buckets are a fair N/59 of the corpus, not a biased one.
+  This is **the actual audio the embeddings were built from**: no fuzzy matching, no quotas, no
+  URL rot, and every track in a downloaded bucket is playable. Archives are never unpacked;
+  `local_audio_index.py` records each member's archive + byte offset and the API streams by
+  range, so the tars are the only disk cost.
+* **Third-party previews (fallback).** Resolved from artist + title via Deezer (iTunes
+  optionally). These are **different recordings** found by fuzzy text search, and only exist for
+  the minority of this royalty-free corpus that those services carry.
 
-Playback is therefore deliberately optional everywhere: unplayable rows are greyed rather than
-failing, and "Only tracks with audio" filters browse and graph to what is playable. Only URLs
-are cached, never audio, matching both providers' terms.
+**Never accept a title-only match.** The resolver used to take the best-scoring candidate even
+when no candidate's artist matched, which is how **2,700 cached rows came to point at a
+completely different act's song** — corpus artist `Both` matched to `Beth Crowley`, `Alexander
+Blu` to `Monty Alexander`. A wrong song is worse than no song, because the badge tells the user
+it is their track. An artist match is now **required**, with accents and punctuation folded (111
+rows were false negatives for that reason alone); the 2,700 wrong rows were purged. Playable
+counts went *down* as a result — 6,518 → 4,275 before the MTG fetch — which is the honest
+direction. `check_previews.py` covers all three cases.
+
+Playback is deliberately optional everywhere: unplayable rows are greyed rather than failing,
+and "Only tracks with audio" filters browse and graph to what is playable. For previews only
+URLs are cached, never audio, matching both providers' terms.
 
 **Quota errors must never be cached as misses.** Deezer reports its rate limit as **HTTP 200**
 with `{"error": {"message": "Quota limit exceeded"}}` — a resolver that reads only `data` cannot
@@ -154,6 +170,16 @@ pool only trips it sooner.
   enrichment in place and reports a lift of ~1 even when every neighbour is the same artist.
 * `.gitignore` anchors the vendored `/lib/` rule, because unanchored it also matched
   SvelteKit's `src/lib/`. Repo-wide `*.png` and `*.csv` rules mean frontend assets are SVG.
+* **A local audio row must name its archive.** MTG ships the corpus as many per-bucket tars, so
+  `audio.tar` holds the basename and `audio.offset` the member's byte offset *within that
+  archive*. Serving an offset against the wrong tar does not fail — it streams plausible bytes
+  from the middle of another file. That is not hypothetical: it happened live while adding the
+  second archive, because the running API still had the old single-tar path. `serve()` now
+  refuses to stream when the named archive is missing, and `local_audio_index.py` drops rows
+  whose archive has gone. Offsets were verified byte-for-byte against both archives afterwards.
+* Audio ingest is two idempotent steps — `fetch_mtg_audio.py` then `local_audio_index.py` — so
+  fetching more buckets later is safe to repeat. Re-run the indexer after any fetch; it is what
+  makes "playable" mean "streamable".
 * **`app.css` defines `data-horizontal:` and `data-vertical:` as custom Tailwind variants.**
   shadcn-svelte's generated components style orientation with those variants (slider,
   scroll-area, separator, tabs), but the installed bits-ui publishes the orientation as

@@ -83,12 +83,18 @@ def mtg_data_dir() -> Path:
     return _env_path("MTG_DATA_DIR") or Path.home() / "mtg-jamendo-dataset" / "data"
 
 
-def mtg_audio_tar() -> Path:
-    """The MTG audio tarball holding the locally-available tracks.
+def mtg_audio_dir() -> Path:
+    """Directory holding the MTG audio archives.
 
-    Only ``-00`` is complete on this machine (586 mp3s); ``-01`` is a truncated
-    partial download, so it is deliberately not used.
+    ``raw_30s/audio-low`` is published as one tar per bucket, where the bucket is
+    ``track_num % 100``. ``fetch_mtg_audio.py`` pulls the buckets the corpus needs and
+    ``local_audio_index.py`` records each member's byte offset, so the API streams from
+    the archives without unpacking them -- the tar is the only disk cost. A local row
+    names its archive in ``audio.tar``.
     """
-    return (
-        _env_path("MTG_AUDIO_TAR") or Path.home() / "mtg" / "raw_30s_audio-low-00.tar"
-    )
+    return _env_path("MTG_AUDIO_DIR") or Path.home() / "mtg"
+
+
+def mtg_audio_tar() -> Path:
+    """Kept for callers written before the audio split into per-bucket archives."""
+    return _env_path("MTG_AUDIO_TAR") or mtg_audio_dir() / "raw_30s_audio-low-00.tar"

@@ -260,10 +260,25 @@ its similarity graph. `webapp/README.md` has the run instructions; the load-bear
   to the seed, so shuffling labels inside it leaves the enrichment in place. Measured: tracks 0-7
   are all David TMX and 61% of their top-20 neighbours share the artist, yet the within-graph lift
   read **0.8×** — below chance. `webapp/api/app/enrichment.py` explains this at length.
-- **Audio is the constrained part.** 586 tracks (1.8%) play from `~/mtg/raw_30s_audio-low-00.tar`
-  by byte-range through a tar-header index (nothing is unpacked); ~28% of the rest resolve to a
-  Deezer/iTunes 30s preview, which is a *different recording*, so the player labels it and offers
-  "not it?". Playback is optional everywhere rather than broken.
+- **Audio comes from MTG, not from previews.** `raw_30s/audio-low` is published as one tar per
+  `track_num % 100` bucket; our corpus spans 59 of them and the buckets are a *representative*
+  slice (bucket 00's genre shares match the corpus within 1.4 pp). `fetch_mtg_audio.py` pulls what
+  fits on disk (the full set is **98.5 GB** against ~44 GB free, so it stops at a free-space floor
+  and is re-runnable), and `local_audio_index.py` records each member's archive + byte offset so
+  the API streams by range and **never unpacks** — the tars are the only disk cost. This is the
+  audio the embeddings were actually built from.
+- ⚠️ **A local row must name its archive** (`audio.tar` + `audio.offset`). Serving an offset
+  against the wrong tar does not raise — it streams plausible bytes from the middle of another
+  file. That happened live while adding a second archive, because the running API still had the
+  old single-tar path; `serve()` now refuses when the named archive is missing, and the indexer
+  drops rows whose archive is gone.
+- ⚠️ **Previews must never accept a title-only match.** The resolver used to take the best-scoring
+  candidate even when no candidate's artist matched, which put **2,700 wrong songs** in the cache
+  (`Both` → `Beth Crowley`, `Alexander Blu` → `Monty Alexander`) — and those were inside the
+  headline "6,518 playable (20%)" figure. An artist match is now required (accents folded; 111
+  rows were false negatives for that reason), the wrong rows were purged, and playable *fell* to
+  4,275, which is the honest direction. Previews are a fallback for buckets whose audio is not
+  downloaded; they are a different recording, so the player labels them and offers "not it?".
 - ⚠️ **Deezer reports its rate limit as HTTP 200** with `{"error": {"message": "Quota limit
   exceeded"}}`. Reading only `data` cannot distinguish that from a genuine miss, and a miss is
   cached forever: a first warm run at 10 workers recorded 12,512 tracks as permanently

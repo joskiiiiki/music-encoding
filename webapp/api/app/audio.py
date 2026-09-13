@@ -20,7 +20,7 @@ from collections.abc import Iterator
 from starlette.responses import StreamingResponse
 
 from . import audio_store, previews
-from .paths import mtg_audio_tar
+from .paths import mtg_audio_dir
 
 CHUNK = 64 * 1024
 _RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
@@ -76,14 +76,15 @@ def _range_headers(start: int, end: int, size: int, partial: bool) -> dict[str, 
     return headers
 
 
-def local_stream(record: dict, range_header: str | None = None) -> StreamingResponse:
-    """Stream one member out of the tarball by byte range, without unpacking it."""
+def local_stream(
+    record: dict, tar_path, range_header: str | None = None
+) -> StreamingResponse:
+    """Stream one member out of its archive by byte range, without unpacking it."""
     size = int(record["size"])
     offset = int(record["offset"])
     rng = parse_range(range_header, size)
     start, end = rng if rng else (0, size - 1)
     length = end - start + 1
-    tar_path = mtg_audio_tar()
 
     def generate() -> Iterator[bytes]:
         with open(tar_path, "rb") as handle:
@@ -195,7 +196,15 @@ def serve(idx: int, artist: str, title: str, range_header: str | None = None):
             con.close()
         kind = audio_store.kind(record)
     if kind == "local":
-        return local_stream(record, range_header)
+        # The row names the archive holding it. A row can outlive its tar (the archive
+        # was deleted to reclaim disk, or the DB was indexed before it was fetched), and
+        # serving the offset blindly would stream bytes out of the middle of another
+        # file -- so a missing archive means "not playable", not a guess.
+        tar_name = record.get("tar")
+        tar_path = mtg_audio_dir() / tar_name if tar_name else None
+        if not tar_path or not tar_path.exists():
+            return None
+        return local_stream(record, tar_path, range_header)
     if kind == "preview":
         try:
             return preview_stream(record["url"], range_header)

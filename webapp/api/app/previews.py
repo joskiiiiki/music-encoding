@@ -27,6 +27,7 @@ import os
 import re
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -40,7 +41,15 @@ _NON_WORD = re.compile(r"[^\w]+", re.UNICODE)
 
 
 def _norm(text: str | None) -> str:
-    return _NON_WORD.sub(" ", (text or "").lower()).strip()
+    """Case-, punctuation- and **accent**-insensitive form used for artist comparison.
+
+    Folding accents matters: without it "Mi Rara Colección" does not match "Mi Rara
+    Coleccion", and 111 cached hits were scored as artist mismatches for that reason
+    alone rather than because the act differed.
+    """
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return _NON_WORD.sub(" ", stripped.lower()).strip()
 
 
 class _RateLimiter:
@@ -152,6 +161,12 @@ def search_deezer(
         rank = _match_quality(
             artist, title, (cand.get("artist") or {}).get("name"), cand.get("title")
         )
+        # The artist MUST match. Accepting the best title-only candidate is how 2,741
+        # cached rows came to point at a different act's song -- corpus artist "Both"
+        # matched to "Beth Crowley", "Alexander Blu" to "Monty Alexander". A wrong song
+        # is worse than no song, because the badge tells the user it is the track.
+        if not rank[0]:
+            continue
         if best_rank is None or rank > best_rank:
             best, best_rank = cand, rank
     if not best:
@@ -161,7 +176,7 @@ def search_deezer(
         "url": best["preview"],
         "matched_artist": (best.get("artist") or {}).get("name") or "",
         "matched_title": best.get("title") or "",
-        "artist_match": bool(best_rank and best_rank[0]),
+        "artist_match": True,
     }, None
 
 
@@ -182,6 +197,8 @@ def search_itunes(
         rank = _match_quality(
             artist, title, cand.get("artistName"), cand.get("trackName")
         )
+        if not rank[0]:  # same rule as Deezer: the artist must match
+            continue
         if best_rank is None or rank > best_rank:
             best, best_rank = cand, rank
     if not best:
@@ -191,7 +208,7 @@ def search_itunes(
         "url": best["previewUrl"],
         "matched_artist": best.get("artistName") or "",
         "matched_title": best.get("trackName") or "",
-        "artist_match": bool(best_rank and best_rank[0]),
+        "artist_match": True,
     }, None
 
 

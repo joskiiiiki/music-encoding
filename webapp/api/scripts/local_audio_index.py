@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-"""Index the locally-held audio so it can be streamed without unpacking the tarball.
+"""Index the local MTG audio so it can be streamed without unpacking the archives.
 
     nix develop .#web --command python scripts/local_audio_index.py
 
-``~/mtg/raw_30s_audio-low-00.tar`` holds 586 mp3s and is the only playable corpus audio
-on this machine -- ``~/mtg_jamendo`` is lossy log-mel spectrograms, which no amount of
-work turns back into a song (the phase is gone). The tarball is 1.55 GiB, so rather than
-unpack a second copy this reads the tar's 512-byte headers once and records each
-member's byte offset and size; the API then serves a track by seeking into the archive.
+Reads every ``raw_30s_audio-low-*.tar`` in the audio directory (see
+``fetch_mtg_audio.py`` for how they get there) and records, per track, **which archive
+holds it and at what byte offset**. The API then serves a track by seeking into that
+archive, so no copy of the audio is ever unpacked -- the tars are the only disk cost.
 
-Member names are ``<num % 100:02d>/<num>.low.mp3``, so the join key to the catalogue is
-``track_num`` -- *not* the ``idx`` position, which is an artefact of whichever run built
-the DB.
+Member names are ``<num % 100:02d>/<num>.low.mp3``, so the join key is ``track_num`` --
+*not* the ``idx`` position, which is an artefact of whichever run built the DB.
 
-The offsets are verified by reading the first bytes at each one and checking for an MP3
-frame, because a wrong offset would not raise -- it would stream plausible-looking bytes
-from the middle of another file.
+Run it after fetching more buckets: it is idempotent, and it also **drops local rows
+whose archive is no longer on disk**, so "playable" in the UI never claims audio that
+cannot actually be streamed.
 """
 
 from __future__ import annotations
@@ -28,10 +26,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> webapp/api
 
 from app import audio_store  # noqa: E402
-from app.paths import catalog_path, mtg_audio_tar  # noqa: E402
+from app.paths import catalog_path, mtg_audio_dir  # noqa: E402
 
 BLOCK = 512
 SUFFIX = ".low.mp3"
+TAR_GLOB = "raw_30s_audio-low-*.tar"
 
 
 def iter_members(path: Path):
@@ -82,18 +81,19 @@ def looks_like_mp3(path: Path, offset: int) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tar", type=Path, default=None)
+    ap.add_argument("--audio-dir", type=Path, default=None)
     args = ap.parse_args()
-    tar = args.tar or mtg_audio_tar()
+    audio_dir = args.audio_dir or mtg_audio_dir()
 
-    if not tar.exists():
-        raise SystemExit(
-            f"tarball not found: {tar}\n"
-            "Set MTG_AUDIO_TAR, or download the MTG audio (see CLAUDE.md). Local audio "
-            "is optional -- without it only preview-backed tracks are playable."
-        )
     if not catalog_path().exists():
         raise SystemExit(f"{catalog_path()} missing -- run export_index.py first")
+    tars = sorted(audio_dir.glob(TAR_GLOB))
+    if not tars:
+        raise SystemExit(
+            f"no {TAR_GLOB} in {audio_dir}\n"
+            "Fetch them with scripts/fetch_mtg_audio.py (see webapp/README.md). Local "
+            "audio is optional: without it only preview-backed tracks are playable."
+        )
 
     cat = sqlite3.connect(f"file:{catalog_path()}?mode=ro", uri=True)
     idx_by_num = {
@@ -101,62 +101,92 @@ def main() -> int:
     }
     cat.close()
 
-    members = list(iter_members(tar))
-    print(f"{tar}")
-    print(f"  {len(members)} members in the archive")
-
     con = audio_store.connect()
     audio_store.ensure_schema(con)
-    matched, unmatched, samples = 0, [], []
-    for name, offset, size in members:
-        base = Path(name).name
-        if not base.endswith(SUFFIX):
-            unmatched.append(name)
-            continue
-        try:
-            num = int(base[: -len(SUFFIX)])
-        except ValueError:
-            unmatched.append(name)
-            continue
-        idx = idx_by_num.get(num)
-        if idx is None:
-            unmatched.append(name)
-            continue
-        audio_store.put(con, idx, source="local", path=name, offset=offset, size=size)
-        matched += 1
-        if len(samples) < 5:
-            samples.append((name, offset))
+    print(f"audio dir: {audio_dir}")
+    print(f"archives : {len(tars)}\n")
+
+    total = 0
+    present_tars = {tar.name for tar in tars}
+    for tar in tars:
+        matched, unmatched, samples = 0, [], []
+        for name, offset, size in iter_members(tar):
+            base = Path(name).name
+            if not base.endswith(SUFFIX):
+                unmatched.append(name)
+                continue
+            try:
+                num = int(base[: -len(SUFFIX)])
+            except ValueError:
+                unmatched.append(name)
+                continue
+            idx = idx_by_num.get(num)
+            if idx is None:
+                unmatched.append(name)
+                continue
+            audio_store.put(
+                con,
+                idx,
+                source="local",
+                tar=tar.name,
+                path=name,
+                offset=offset,
+                size=size,
+            )
+            matched += 1
+            if len(samples) < 3:
+                samples.append((name, offset))
+        con.commit()
+        total += matched
+
+        # Verify the offsets, not just the row count: a wrong offset would not raise, it
+        # would stream plausible bytes from the middle of another file.
+        bad = [n for n, o in samples if not looks_like_mp3(tar, o)]
+        note = "" if not bad else f"  !! {len(bad)} bad offset(s): {bad[:2]}"
+        print(
+            f"  {tar.name}: {matched} tracks indexed  "
+            f"({tar.stat().st_size / 1e9:.2f} GB){note}",
+            flush=True,
+        )
+        if bad:
+            print(f"\nFAILED: {tar.name} offsets do not point at mp3 data")
+            return 1
+
+    # A track that used to be preview-backed and is now on disk keeps its old preview
+    # columns, because `put()` only writes the fields it is given. Exact audio wins, so
+    # clear the leftovers rather than leave a row claiming both sources: if the archive
+    # is ever deleted the row goes with it and the track falls back to on-demand
+    # resolution, which is the behaviour we want anyway.
+    cleared = con.execute(
+        "UPDATE audio SET url = NULL, provider = NULL, matched_artist = NULL, "
+        "matched_title = NULL, artist_match = NULL "
+        "WHERE source = 'local' AND url IS NOT NULL"
+    ).rowcount
+
+    # A row can outlive its archive (deleted to reclaim disk), and `serve()` refuses to
+    # stream from a missing tar -- so drop those rows rather than let the UI promise
+    # audio that 404s.
+    stale = [
+        row[0]
+        for row in con.execute(
+            "SELECT idx FROM audio WHERE source = 'local' AND (tar IS NULL "
+            f"OR tar NOT IN ({','.join('?' * len(present_tars))}))",
+            sorted(present_tars),
+        )
+    ]
+    for idx in stale:
+        con.execute("DELETE FROM audio WHERE idx = ?", (idx,))
     con.commit()
 
-    rows = con.execute(
-        "SELECT COUNT(*), SUM(size) FROM audio WHERE source = 'local'"
-    ).fetchone()
+    counts = dict(con.execute("SELECT source, COUNT(*) FROM audio GROUP BY source"))
     con.close()
 
-    print(f"  matched to the catalogue : {matched}")
-    print(f"  rows written             : {rows[0]}  ({rows[1] / 1e6:.1f} MB of audio)")
-    if unmatched:
-        print(
-            f"  ! {len(unmatched)} members did not map to a track, e.g. {unmatched[:3]}"
-        )
-
-    # Verify the offsets, not just the row count: streaming from a wrong offset would
-    # look like success and play noise.
-    bad = [name for name, offset in samples if not looks_like_mp3(tar, offset)]
-    for name, offset in samples:
-        head = "mp3" if looks_like_mp3(tar, offset) else "NOT MP3"
-        print(f"  offset check {name} @ {offset} -> {head}")
-
-    if bad or matched == 0 or rows[0] != matched:
-        print("\nFAILED:")
-        if matched == 0:
-            print("  - no members matched; is this the right tarball?")
-        if rows[0] != matched:
-            print(f"  - wrote {rows[0]} rows for {matched} members")
-        for name in bad:
-            print(f"  - {name} does not start with mp3 data at its recorded offset")
-        return 1
-    print(f"\nOK: {matched} local tracks indexed and offsets verified")
+    print(f"\n{total} local tracks indexed across {len(tars)} archives")
+    if cleared:
+        print(f"cleared stale preview fields on {cleared} now-local tracks")
+    if stale:
+        print(f"dropped {len(stale)} rows whose archive is gone")
+    print(f"availability now: {counts}")
     return 0
 
 

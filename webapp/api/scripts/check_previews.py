@@ -70,6 +70,34 @@ def main() -> int:
         hit, error = previews.search_deezer("Nobody", "Nothing")
     check("an empty result is a genuine miss", hit is None and error is None)
 
+    # The regression that put 2,741 wrong songs in the cache: a candidate matching on
+    # title alone was accepted. It must now be rejected and reported as a miss.
+    wrong_artist = {
+        "preview": "https://example.invalid/w.mp3",
+        "title": "Monster",
+        "artist": {"name": "Beth Crowley"},
+    }
+    with stub({"data": [wrong_artist]}):
+        hit, error = previews.search_deezer("Both", "Monster")
+    check(
+        "a title-only candidate is rejected, not cached as a hit",
+        hit is None and error is None,
+        f"got hit={bool(hit)}",
+    )
+    with stub({"data": [wrong_artist]}):
+        hit, error = previews.search_deezer("Beth Crowley", "Monster")
+    check("the same candidate is accepted when the artist matches", bool(hit))
+
+    # Accents must not defeat the comparison: 111 cached rows were false negatives.
+    accented = {
+        "preview": "https://example.invalid/a.mp3",
+        "title": "otra forma de ahogo",
+        "artist": {"name": "Mi Rara Colección"},
+    }
+    with stub({"data": [accented]}):
+        hit, error = previews.search_deezer("Mi Rara Coleccion", "otra forma")
+    check("an accent-only artist difference still matches", bool(hit))
+
     track = {
         "preview": "https://example.invalid/p.mp3",
         "title": "Sry",

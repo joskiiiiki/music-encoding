@@ -29,6 +29,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS audio (
     idx            INTEGER PRIMARY KEY,
     source         TEXT NOT NULL,   -- local | deezer | itunes | none
+    tar            TEXT,        -- archive basename holding the member (source='local')
     path           TEXT,            -- tar member name, for source='local'
     offset         INTEGER,         -- byte offset of the member's data
     size           INTEGER,         -- member size in bytes
@@ -56,6 +57,12 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 
 def ensure_schema(con: sqlite3.Connection) -> None:
     con.executescript(SCHEMA)
+    # MTG ships the corpus as many per-bucket archives, so a local row has to name the
+    # one holding it. Databases written before that column existed get it added here;
+    # their rows keep tar=NULL until local_audio_index.py re-indexes them.
+    columns = {row[1] for row in con.execute("PRAGMA table_info(audio)")}
+    if "tar" not in columns:
+        con.execute("ALTER TABLE audio ADD COLUMN tar TEXT")
     con.commit()
 
 
