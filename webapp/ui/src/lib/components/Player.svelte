@@ -94,7 +94,7 @@
 {#if player.track}
 	<div class="bg-background/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur">
 
-		<div class="flex items-center gap-3 px-4 py-2.5">
+		<div class="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-2.5">
 			<Button
 				variant="outline"
 				size="icon"
@@ -111,7 +111,9 @@
 				{/if}
 			</Button>
 
-			<div class="min-w-0 flex-1">
+			<!-- Sized to its content, capped, and allowed to shrink: the slider takes the
+			     remaining width, so this must not claim `flex-1` or the two split the bar. -->
+			<div class="min-w-0 max-w-[300px] sm:max-w-[380px]">
 				<div class="flex items-center gap-2">
 					<a href="/track/{player.track.idx}" class="hover:underline truncate text-sm font-medium">
 						{player.track.title}
@@ -135,7 +137,7 @@
 				</div>
 			</div>
 
-			<div class="hidden w-48 sm:block">
+			<div class="hidden min-w-[120px] flex-1 sm:block">
 				<!-- Keyed on the track so each new song gets a fresh slider: without it the
 				     instance keeps the previous track's internal state, and the position read
 				     as "not reset".
@@ -205,7 +207,7 @@
 		{#if player.walkEnabled}
 			<!-- Below the transport controls, and collapsible: the trail is useful but it is
 			     also a lot of small text to keep on screen the whole time. -->
-			<div class="px-4 pb-2">
+			<div class="mx-auto max-w-[1400px] px-4 pb-2">
 				<div class="flex items-center gap-2">
 					<Button
 						variant="ghost"
