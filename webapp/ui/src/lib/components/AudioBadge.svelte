@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { audioLabel, type AudioKind } from '$lib/api';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import { cn } from '$lib/utils.js';
 
 	let { kind, class: className = '' }: { kind: AudioKind; class?: string } = $props();
 
@@ -17,17 +20,32 @@
 	const styles: Record<AudioKind, string> = {
 		local: 'border-emerald-600/40 text-emerald-700 dark:text-emerald-400',
 		preview: 'border-sky-600/40 text-sky-700 dark:text-sky-400',
-		none: 'border-border text-muted-foreground',
-		unknown: 'border-border text-muted-foreground'
+		none: 'text-muted-foreground',
+		unknown: 'text-muted-foreground'
+	};
+
+	const glyph: Record<AudioKind, string> = {
+		local: '●',
+		preview: '▷',
+		none: '·',
+		unknown: '·'
 	};
 </script>
 
-<span
-	title={detail[kind]}
-	class="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap {styles[
-		kind
-	]} {className}"
->
-	{#if kind === 'local'}●{:else if kind === 'preview'}▷{:else}·{/if}
-	{audioLabel(kind)}
-</span>
+<Tooltip.Root>
+	<Tooltip.Trigger>
+		{#snippet child({ props })}
+			<Badge
+				variant="outline"
+				{...props}
+				class={cn('h-5 gap-1 rounded px-1.5 text-[10px]', styles[kind], className)}
+			>
+				{glyph[kind]}
+				{audioLabel(kind)}
+			</Badge>
+		{/snippet}
+	</Tooltip.Trigger>
+	<Tooltip.Content>
+		<p class="max-w-xs text-xs">{detail[kind]}</p>
+	</Tooltip.Content>
+</Tooltip.Root>

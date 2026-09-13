@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { FacetValue } from '$lib/api';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 
 	let {
@@ -44,22 +46,22 @@
 	<div class="mb-2 flex items-baseline justify-between">
 		<h3 class="text-xs font-semibold tracking-wide uppercase">{title}</h3>
 		{#if selected.length}
-			<button
-				type="button"
-				class="text-muted-foreground hover:text-foreground text-[10px] underline"
+			<Button
+				variant="link"
+				size="xs"
+				class="text-muted-foreground h-auto p-0 text-[10px]"
 				onclick={() => onselect([])}
 			>
 				clear
-			</button>
+			</Button>
 		{/if}
 	</div>
 
 	{#if values.length > limit}
-		<input
-			type="text"
+		<Input
 			bind:value={query}
 			placeholder="filter {title}…"
-			class="border-input mb-2 w-full rounded border px-2 py-1 text-xs outline-none"
+			class="mb-2 h-7 text-xs md:text-xs"
 		/>
 	{/if}
 
@@ -95,12 +97,13 @@
 	</ScrollArea>
 
 	{#if !query && values.length > limit}
-		<button
-			type="button"
-			class="text-muted-foreground hover:text-foreground mt-1 text-[10px] underline"
+		<Button
+			variant="link"
+			size="xs"
+			class="text-muted-foreground mt-1 h-auto p-0 text-[10px]"
 			onclick={() => (expanded = !expanded)}
 		>
 			{expanded ? 'show fewer' : `show all ${values.length}`}
-		</button>
+		</Button>
 	{/if}
 </div>

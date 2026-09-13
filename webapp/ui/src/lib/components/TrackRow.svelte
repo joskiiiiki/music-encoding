@@ -1,7 +1,11 @@
 <script lang="ts">
+	import Play from '@lucide/svelte/icons/play';
+	import Pause from '@lucide/svelte/icons/pause';
 	import { formatDuration, type Track } from '$lib/api';
 	import { player } from '$lib/playerStore.svelte.js';
 	import AudioBadge from './AudioBadge.svelte';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	let {
 		track,
@@ -25,20 +29,21 @@
 		<span class="text-muted-foreground w-6 shrink-0 text-right text-xs tabular-nums">{rank}</span>
 	{/if}
 
-	<button
-		type="button"
-		class="border-border hover:bg-accent flex size-8 shrink-0 items-center justify-center rounded-full border text-xs disabled:opacity-40"
+	<Button
+		variant="outline"
+		size="icon-sm"
+		class="shrink-0 rounded-full"
 		disabled={track.audio === 'none'}
 		title={track.audio === 'none' ? 'No audio available for this track' : 'Play'}
 		aria-label={isPlaying ? 'Pause' : `Play ${track.title}`}
 		onclick={() => player.toggle(track)}
 	>
 		{#if isPlaying}
-			<svg viewBox="0 0 16 16" class="size-3 fill-current"><rect x="3" y="2" width="3.5" height="12" /><rect x="9.5" y="2" width="3.5" height="12" /></svg>
+			<Pause />
 		{:else}
-			<svg viewBox="0 0 16 16" class="size-3 fill-current"><path d="M4 2.5v11l9-5.5z" /></svg>
+			<Play />
 		{/if}
-	</button>
+	</Button>
 
 	<div class="min-w-0 flex-1">
 		<div class="flex items-baseline gap-2">
@@ -64,9 +69,9 @@
 		{#if !compact && track.tags.length}
 			<div class="mt-1 flex flex-wrap gap-1">
 				{#each track.tags.slice(0, 4) as tag (tag)}
-					<span class="bg-secondary text-secondary-foreground rounded px-1.5 py-px text-[10px]">
+					<Badge variant="secondary" class="h-4 rounded px-1.5 text-[10px] font-normal">
 						{tag}
-					</span>
+					</Badge>
 				{/each}
 			</div>
 		{/if}

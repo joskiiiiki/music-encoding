@@ -1,5 +1,14 @@
 <script lang="ts">
 	import type { Enrichment } from '$lib/api';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
+	import {
+		Table,
+		TableBody,
+		TableCell,
+		TableHead,
+		TableHeader,
+		TableRow
+	} from '$lib/components/ui/table/index.js';
 
 	let { enrichment, k }: { enrichment: Enrichment; k: number } = $props();
 
@@ -23,55 +32,57 @@
 	]);
 </script>
 
-<div class="bg-card text-card-foreground rounded-lg border p-3">
-	<div class="mb-2 flex items-baseline justify-between">
-		<h3 class="text-sm font-medium">Is this neighbourhood organised?</h3>
-		<span class="text-muted-foreground text-xs">{k} neighbours</span>
-	</div>
+<Card class="gap-0 py-3">
+	<CardContent class="px-3">
+		<div class="mb-2 flex items-baseline justify-between">
+			<h3 class="text-sm font-medium">Is this neighbourhood organised?</h3>
+			<span class="text-muted-foreground text-xs">{k} neighbours</span>
+		</div>
 
-	<table class="w-full text-xs">
-		<thead class="text-muted-foreground">
-			<tr class="border-b">
-				<th class="py-1 text-left font-medium">signal</th>
-				<th class="py-1 text-right font-medium">observed</th>
-				<th class="py-1 text-right font-medium">chance</th>
-				<th class="py-1 text-right font-medium">lift</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each rows as row (row.name)}
-				<tr class="border-b last:border-b-0">
-					<td class="py-1.5">
-						{row.name}
-						{#if row.data.reason}
-							<span class="text-muted-foreground">(n/a)</span>
-						{/if}
-					</td>
-					<td class="py-1.5 text-right tabular-nums">
-						{row.observed.toFixed(3)}
-					</td>
-					<td class="text-muted-foreground py-1.5 text-right tabular-nums">
-						{row.data.chance.toFixed(4)}
-					</td>
-					<td class="py-1.5 text-right font-medium tabular-nums">
-						{lift(row.data.lift)}
-					</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
+		<Table>
+			<TableHeader>
+				<TableRow>
+					<TableHead class="h-7 text-xs">signal</TableHead>
+					<TableHead class="h-7 text-right text-xs">observed</TableHead>
+					<TableHead class="h-7 text-right text-xs">chance</TableHead>
+					<TableHead class="h-7 text-right text-xs">lift</TableHead>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{#each rows as row (row.name)}
+					<TableRow>
+						<TableCell class="py-1.5 text-xs">
+							{row.name}
+							{#if row.data.reason}
+								<span class="text-muted-foreground">(n/a)</span>
+							{/if}
+						</TableCell>
+						<TableCell class="py-1.5 text-right text-xs tabular-nums">
+							{row.observed.toFixed(3)}
+						</TableCell>
+						<TableCell class="text-muted-foreground py-1.5 text-right text-xs tabular-nums">
+							{row.data.chance.toFixed(4)}
+						</TableCell>
+						<TableCell class="py-1.5 text-right text-xs font-medium tabular-nums">
+							{lift(row.data.lift)}
+						</TableCell>
+					</TableRow>
+				{/each}
+			</TableBody>
+		</Table>
 
-	<p class="text-muted-foreground mt-2 text-[11px] leading-snug">
-		{#if enrichment.tags.reason}
-			{enrichment.tags.reason}.
-		{:else}
-			Observed is the fraction of neighbours agreeing with the seed; chance is what a randomly
-			picked corpus track would score, weighted by tag prevalence (genre tags are heavily skewed —
-			<em>electronic</em> alone is 29% of the corpus). Measured corpus-wide on this checkpoint:
-			same-artist ≈ 80–140×, genre tags ≈ 3.3–4.0×.
-		{/if}
-		{#if enrichment.artist.reason}
-			Note: {enrichment.artist.reason}.
-		{/if}
-	</p>
-</div>
+		<p class="text-muted-foreground mt-2 text-[11px] leading-snug">
+			{#if enrichment.tags.reason}
+				{enrichment.tags.reason}.
+			{:else}
+				Observed is the fraction of neighbours agreeing with the seed; chance is what a randomly
+				picked corpus track would score, weighted by tag prevalence (genre tags are heavily skewed —
+				<em>electronic</em> alone is 29% of the corpus). Measured corpus-wide on this checkpoint:
+				same-artist ≈ 80–140×, genre tags ≈ 3.3–4.0×.
+			{/if}
+			{#if enrichment.artist.reason}
+				Note: {enrichment.artist.reason}.
+			{/if}
+		</p>
+	</CardContent>
+</Card>

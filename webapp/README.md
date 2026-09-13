@@ -33,7 +33,7 @@ nix develop --command python webapp/api/scripts/verify_export.py
 # 2. Index the local audio (optional but recommended: 586 full tracks)
 nix develop .#web --command python webapp/api/scripts/local_audio_index.py
 
-# 3. Pre-resolve previews so coverage is known upfront (optional, ~3-4 h, resumable)
+# 3. Pre-resolve previews so coverage is known upfront (optional, ~2.2 h measured, resumable)
 nix develop .#web --command python webapp/api/scripts/warm_previews.py --workers 6
 ```
 
@@ -111,11 +111,12 @@ Two sources, and neither covers everything:
   of member byte offsets, so nothing is unpacked. This is the *actual* audio the embedding came
   from.
 * **Preview** — resolved from artist + title via Deezer (iTunes as an optional second pass). MTG-
-  Jamendo is royalty-free and largely absent from those services, and the honest number is still
-  being nailed down: a 40-track random sample suggested **~28%**, while the first full pass is
-  resolving **~16%** of the tracks it has reached. Deezer is the default for a measured reason —
-  see the pre-warm note below. A preview is also **a different recording** of the song matched by
-  fuzzy text search, so the player labels it and offers "not it?" to re-resolve.
+  Jamendo is royalty-free and largely absent from those services. A completed full pass resolved
+  **5,918 tracks (18% of the 32,197 that are not local)**; a 40-track random sample had suggested
+  28%, which is a reminder of how wide the interval is at n=40. In total **6,518 of 32,783 tracks
+  (20%) are playable** and 26,265 are confirmed unavailable. Deezer is the default for a measured
+  reason — see the pre-warm note below. A preview is also **a different recording** of the song
+  matched by fuzzy text search, so the player labels it and offers "not it?" to re-resolve.
 
 Playback is therefore deliberately optional everywhere: unplayable rows are greyed rather than
 failing, and "Only tracks with audio" filters browse and graph to what is playable. Only URLs
@@ -153,3 +154,17 @@ pool only trips it sooner.
   enrichment in place and reports a lift of ~1 even when every neighbour is the same artist.
 * `.gitignore` anchors the vendored `/lib/` rule, because unanchored it also matched
   SvelteKit's `src/lib/`. Repo-wide `*.png` and `*.csv` rules mean frontend assets are SVG.
+* **`app.css` defines `data-horizontal:` and `data-vertical:` as custom Tailwind variants.**
+  shadcn-svelte's generated components style orientation with those variants (slider,
+  scroll-area, separator, tabs), but the installed bits-ui publishes the orientation as
+  `data-orientation="horizontal" | "vertical"`. The short attributes never appear in the
+  DOM, so those variants never matched — and the failure is silent: a Slider drew its thumb
+  with **no track**. Defining the two variants in terms of the attribute that exists fixes
+  all four components at once, and unlike editing the component files it survives a re-run
+  of `shadcn-svelte add`.
+* `ScrollArea`'s own scrollbar thumb does not mount in this app: bits-ui only renders it
+  when its measurement reports overflow, and it reports none (a 14-row facet list inside
+  `h-56` is visibly clipped, yet `--bits-scroll-area-thumb-height` comes out at 222px in a
+  224px viewport). The panes scroll correctly and the bar you see is the platform's own.
+  Styling it with `::-webkit-scrollbar` was tried and removed — this Chromium uses overlay
+  scrollbars, which ignore that CSS entirely, so the rule was inert.

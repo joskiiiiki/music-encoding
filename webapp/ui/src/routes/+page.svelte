@@ -4,9 +4,25 @@
 	import { api, type Facets, type SearchResponse, type Stats, type Track } from '$lib/api';
 	import FacetFilter from '$lib/components/FacetFilter.svelte';
 	import TrackRow from '$lib/components/TrackRow.svelte';
+	import { Alert, AlertDescription } from '$lib/components/ui/alert/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 
 	const PAGE_SIZE = 50;
+
+	const SORTS = [
+		{ value: 'relevance', label: 'relevance' },
+		{ value: 'artist', label: 'artist' },
+		{ value: 'title', label: 'title' },
+		{ value: 'released_desc', label: 'newest' },
+		{ value: 'released_asc', label: 'oldest' },
+		{ value: 'duration_asc', label: 'shortest' },
+		{ value: 'idx', label: 'corpus order' }
+	];
 
 	// Initial state comes from the URL, so a filtered view is shareable and survives a
 	// reload. It is written back on every change below.
@@ -92,60 +108,81 @@
 	const activeFilters = $derived(
 		genres.length + instruments.length + moods.length + (playableOnly ? 1 : 0)
 	);
+
+	function resetFilters() {
+		genres = [];
+		instruments = [];
+		moods = [];
+		playableOnly = false;
+	}
 </script>
 
 <div class="grid gap-6 pt-4 lg:grid-cols-[260px_1fr]">
 	<aside class="lg:sticky lg:top-4 lg:self-start">
-		<div class="bg-card rounded-lg border px-3 py-2">
-			<div class="flex items-center gap-2 py-1">
-				<Checkbox id="playable-only" bind:checked={playableOnly} />
-				<label for="playable-only" class="cursor-pointer text-xs font-medium">
-					Only tracks with audio
-				</label>
-			</div>
-			<p class="text-muted-foreground pb-1 text-[10px] leading-snug">
-				{stats
-					? `${stats.audio.playable.toLocaleString()} of ${stats.audio.total_tracks.toLocaleString()} playable so far`
-					: 'audio coverage'}
-				{#if stats && stats.audio.unresolved > 0}
-					· {stats.audio.unresolved.toLocaleString()} not resolved yet
-				{/if}
-			</p>
-		</div>
+		<Card class="gap-0 py-2">
+			<CardContent class="px-3">
+				<div class="flex items-center gap-2 py-1">
+					<Checkbox id="playable-only" bind:checked={playableOnly} />
+					<label for="playable-only" class="cursor-pointer text-xs font-medium">
+						Only tracks with audio
+					</label>
+				</div>
+				<p class="text-muted-foreground pb-1 text-[10px] leading-snug">
+					{stats
+						? `${stats.audio.playable.toLocaleString()} of ${stats.audio.total_tracks.toLocaleString()} playable so far`
+						: 'audio coverage'}
+					{#if stats && stats.audio.unresolved > 0}
+						· {stats.audio.unresolved.toLocaleString()} not resolved yet
+					{/if}
+				</p>
+			</CardContent>
+		</Card>
 
-		<div class="bg-card mt-4 rounded-lg border px-3 py-1">
-			<FacetFilter title="genre" values={facets.genre} selected={genres} limit={14} onselect={(next) => (genres = next)} />
-			<FacetFilter
-				title="instrument"
-				values={facets.instrument}
-				selected={instruments}
-				limit={10}
-				onselect={(next) => (instruments = next)}
-			/>
-			<FacetFilter title="mood" values={facets.mood} selected={moods} limit={10} onselect={(next) => (moods = next)} />
-		</div>
+		<Card class="mt-4 gap-0 py-1">
+			<CardContent class="px-3">
+				<FacetFilter
+					title="genre"
+					values={facets.genre}
+					selected={genres}
+					limit={14}
+					onselect={(next) => (genres = next)}
+				/>
+				<FacetFilter
+					title="instrument"
+					values={facets.instrument}
+					selected={instruments}
+					limit={10}
+					onselect={(next) => (instruments = next)}
+				/>
+				<FacetFilter
+					title="mood"
+					values={facets.mood}
+					selected={moods}
+					limit={10}
+					onselect={(next) => (moods = next)}
+				/>
+			</CardContent>
+		</Card>
 	</aside>
 
 	<section class="min-w-0">
 		<div class="flex flex-wrap items-center gap-2">
-			<input
+			<Input
 				type="search"
 				bind:value={q}
 				placeholder="Search title, artist or album — e.g. Podington Bear"
-				class="border-input bg-background focus:border-ring min-w-[240px] flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+				class="min-w-[240px] flex-1"
 			/>
-			<select
-				bind:value={sort}
-				class="border-input bg-background rounded-lg border px-2 py-2 text-xs"
-			>
-				<option value="relevance">relevance</option>
-				<option value="artist">artist</option>
-				<option value="title">title</option>
-				<option value="released_desc">newest</option>
-				<option value="released_asc">oldest</option>
-				<option value="duration_asc">shortest</option>
-				<option value="idx">corpus order</option>
-			</select>
+			<Select.Root type="single" bind:value={sort}>
+				<Select.Trigger size="sm" class="w-[150px]" aria-label="Sort results">
+					<Select.Value placeholder="sort" />
+				</Select.Trigger>
+				<Select.Content>
+					{#each SORTS as option (option.value)}
+						<Select.Item value={option.value}>{option.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		</div>
 
 		<div class="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
@@ -160,52 +197,52 @@
 			</span>
 			{#if loading}<span>· working…</span>{/if}
 			{#if activeFilters}
-				<button
-					type="button"
-					class="hover:text-foreground underline"
-					onclick={() => {
-						genres = [];
-						instruments = [];
-						moods = [];
-						playableOnly = false;
-					}}
-				>
+				<Button variant="link" size="xs" class="h-auto p-0 text-xs" onclick={resetFilters}>
 					reset filters
-				</button>
+				</Button>
 			{/if}
 		</div>
 
 		{#if error}
-			<p class="text-destructive mt-4 rounded border border-dashed p-3 text-sm">
-				{error}
-			</p>
+			<Alert variant="destructive" class="mt-4">
+				<AlertDescription>{error}</AlertDescription>
+			</Alert>
+		{/if}
+
+		{#if !result && loading}
+			<div class="mt-3 space-y-2">
+				{#each Array(6) as _, index (index)}
+					<Skeleton class="h-14 w-full rounded-lg" />
+				{/each}
+			</div>
 		{/if}
 
 		{#if result && !items.length && !loading}
-			<p class="text-muted-foreground mt-6 rounded border border-dashed p-6 text-center text-sm">
-				No tracks match those filters.
-				{#if playableOnly}
-					Try turning off “only tracks with audio” — coverage is still filling in.
-				{/if}
-			</p>
+			<Alert class="mt-6">
+				<AlertDescription>
+					No tracks match those filters.
+					{#if playableOnly}
+						Try turning off “only tracks with audio” — coverage is still filling in.
+					{/if}
+				</AlertDescription>
+			</Alert>
 		{/if}
 
-		<div class="bg-card mt-3 rounded-lg border">
-			{#each items as track (track.idx)}
-				<TrackRow {track} />
-			{/each}
-		</div>
+		{#if items.length}
+			<Card class="mt-3 gap-0 py-0">
+				<CardContent class="px-0">
+					{#each items as track (track.idx)}
+						<TrackRow {track} />
+					{/each}
+				</CardContent>
+			</Card>
+		{/if}
 
 		{#if result && items.length < result.total}
 			<div class="mt-3 flex justify-center">
-				<button
-					type="button"
-					class="border-border hover:bg-accent rounded-lg border px-4 py-2 text-xs"
-					disabled={loading}
-					onclick={() => run(false)}
-				>
+				<Button variant="outline" size="sm" disabled={loading} onclick={() => run(false)}>
 					{loading ? 'loading…' : `load ${PAGE_SIZE} more`}
-				</button>
+				</Button>
 			</div>
 		{/if}
 
@@ -219,7 +256,8 @@
 					({stats.audio.local} local full tracks, {stats.audio.deezer + stats.audio.itunes} previews),
 					{stats.audio.unresolved.toLocaleString()} not yet looked up.
 				{:else}
-					Audio: {stats.audio.playable.toLocaleString()} playable, {stats.audio.attempted_misses.toLocaleString()} confirmed unavailable.
+					Audio: {stats.audio.playable.toLocaleString()} playable,
+					{stats.audio.attempted_misses.toLocaleString()} confirmed unavailable.
 				{/if}
 			</p>
 		{/if}

@@ -12,7 +12,14 @@
 	import EnrichmentPanel from '$lib/components/EnrichmentPanel.svelte';
 	import SimilarityGraph from '$lib/components/SimilarityGraph.svelte';
 	import TrackRow from '$lib/components/TrackRow.svelte';
+	import { Alert, AlertDescription } from '$lib/components/ui/alert/index.js';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Card, CardContent } from '$lib/components/ui/card/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import { Slider } from '$lib/components/ui/slider/index.js';
 	import { player } from '$lib/playerStore.svelte.js';
 
 	const idx = $derived(Number(page.params.idx));
@@ -95,9 +102,15 @@
 
 <div class="pt-4">
 	{#if error}
-		<p class="text-destructive rounded border border-dashed p-4 text-sm">{error}</p>
+		<Alert variant="destructive">
+			<AlertDescription>{error}</AlertDescription>
+		</Alert>
 	{:else if loading && !track}
-		<p class="text-muted-foreground text-sm">loading track…</p>
+		<div class="space-y-3">
+			<Skeleton class="h-7 w-64" />
+			<Skeleton class="h-4 w-96" />
+			<Skeleton class="h-[520px] w-full rounded-lg" />
+		</div>
 	{:else if track}
 		<div class="flex flex-wrap items-start gap-x-6 gap-y-3">
 			<div class="min-w-0 flex-1">
@@ -114,39 +127,45 @@
 				</p>
 				<div class="mt-2 flex flex-wrap items-center gap-1">
 					{#each track.tags as tag (tag)}
-						<a
+						<Badge
+							variant="secondary"
 							href="/?genre={encodeURIComponent(tag)}"
-							class="bg-secondary text-secondary-foreground hover:bg-accent rounded px-1.5 py-0.5 text-[10px]"
+							class="h-4 rounded px-1.5 text-[10px] font-normal"
+							title="Show all {tag} tracks"
 						>
 							{tag}
-						</a>
+						</Badge>
 					{/each}
 					{#if track.instrument}
-						<a
+						<Badge
+							variant="outline"
 							href="/?instrument={encodeURIComponent(track.instrument)}"
-							class="bg-muted text-muted-foreground hover:bg-accent rounded px-1.5 py-0.5 text-[10px]"
+							class="text-muted-foreground h-4 rounded px-1.5 text-[10px] font-normal"
+							title="Show all tracks with {track.instrument}"
 						>
 							{track.instrument}
-						</a>
+						</Badge>
 					{/if}
 					{#if track.mood}
-						<a
+						<Badge
+							variant="outline"
 							href="/?mood={encodeURIComponent(track.mood)}"
-							class="bg-muted text-muted-foreground hover:bg-accent rounded px-1.5 py-0.5 text-[10px]"
+							class="text-muted-foreground h-4 rounded px-1.5 text-[10px] font-normal"
+							title="Show all {track.mood} tracks"
 						>
 							{track.mood}
-						</a>
+						</Badge>
 					{/if}
 				</div>
 			</div>
-			<button
-				type="button"
-				class="bg-primary text-primary-foreground rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-50"
+			<Button
+				size="lg"
 				disabled={track.audio === 'none'}
 				onclick={() => player.toggle(track!)}
+				title={track.audio === 'none' ? 'No audio available for this track' : 'Play'}
 			>
 				{player.track?.idx === track.idx && player.playing ? 'Pause' : 'Play'}
-			</button>
+			</Button>
 		</div>
 
 		{#if graph}
@@ -158,56 +177,74 @@
 				<div>
 					<div class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
 						{#if focus}
-							<button
-								type="button"
-								class="border-border hover:bg-accent rounded border px-2 py-1"
-								onclick={() => (focus = false)}
-							>
+							<Button variant="outline" size="xs" onclick={() => (focus = false)}>
 								✕ close
-							</button>
+							</Button>
 						{:else}
-							<button
-								type="button"
-								class="border-border hover:bg-accent rounded border px-2 py-1"
-								onclick={() => (focus = true)}
-							>
+							<Button variant="outline" size="xs" onclick={() => (focus = true)}>
 								⤢ focus
-							</button>
+							</Button>
 						{/if}
 
+						<!-- Each slider gets a definite-width wrapper: Slider's own base
+						     class is w-full, and as a flex item inside a content-sized
+						     <label> that resolves to zero width. -->
 						<label class="flex items-center gap-2">
 							<span class="text-muted-foreground">neighbours</span>
-							<input type="range" min="5" max="50" bind:value={k} class="accent-primary w-24" />
+							<div class="w-24 shrink-0">
+								<Slider
+									type="single"
+									min={5}
+									max={50}
+									step={1}
+									value={k}
+									onValueChange={(value) => (k = value)}
+									aria-label="Number of neighbours"
+								/>
+							</div>
 							<span class="w-6 tabular-nums">{k}</span>
 						</label>
 
 						<label class="flex items-center gap-2">
 							<span class="text-muted-foreground">edge ≥</span>
-							<input
-								type="range"
-								min="0"
-								max="0.95"
-								step="0.05"
-								bind:value={minSim}
-								class="accent-primary w-24"
-							/>
+							<div class="w-24 shrink-0">
+								<Slider
+									type="single"
+									min={0}
+									max={0.95}
+									step={0.05}
+									value={minSim}
+									onValueChange={(value) => (minSim = value)}
+									aria-label="Minimum edge cosine"
+								/>
+							</div>
 							<span class="w-8 tabular-nums">{minSim.toFixed(2)}</span>
 						</label>
 
 						<label class="flex items-center gap-1">
 							<span class="text-muted-foreground">colour</span>
-							<select bind:value={colorBy} class="border-input bg-background rounded border px-1 py-1">
-								<option value="genre">genre</option>
-								<option value="artist">artist</option>
-							</select>
+							<Select.Root type="single" bind:value={colorBy}>
+								<Select.Trigger size="sm" class="w-[110px]" aria-label="Colour nodes by">
+									<Select.Value />
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="genre">genre</Select.Item>
+									<Select.Item value="artist">artist</Select.Item>
+								</Select.Content>
+							</Select.Root>
 						</label>
 
 						<label class="flex items-center gap-1">
 							<span class="text-muted-foreground">space</span>
-							<select bind:value={space} class="border-input bg-background rounded border px-1 py-1">
-								<option value="whitened">whitened</option>
-								<option value="raw">raw</option>
-							</select>
+							<Select.Root type="single" bind:value={space}>
+								<Select.Trigger size="sm" class="w-[120px]" aria-label="Embedding space">
+									<Select.Value />
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="whitened">whitened</Select.Item>
+									<Select.Item value="raw">raw</Select.Item>
+								</Select.Content>
+							</Select.Root>
 						</label>
 					</div>
 
@@ -237,7 +274,7 @@
 				<div class="space-y-4">
 					<EnrichmentPanel enrichment={graph.enrichment} k={graph.nodes.length - 1} />
 
-					<div class="bg-card rounded-lg border">
+					<Card class="gap-0 py-0">
 						<div class="flex items-baseline justify-between border-b px-3 py-2">
 							<h3 class="text-sm font-medium">Similar tracks</h3>
 							<span class="text-muted-foreground text-xs">cosine</span>
@@ -249,7 +286,7 @@
 								<TrackRow track={neighbour} rank={index + 1} compact />
 							{/each}
 						</ScrollArea>
-					</div>
+					</Card>
 
 					<p class="text-muted-foreground text-[11px] leading-snug">
 						Ranked by cosine in the <strong>{space}</strong> space. Whitened is the corpus ZCA
