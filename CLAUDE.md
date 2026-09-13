@@ -278,11 +278,17 @@ its similarity graph. `webapp/README.md` has the run instructions; the load-bear
   pipeline and 5-window pooling the corpus was built with; the API stays torch-free and answers
   503 if the sidecar is not running. Verified by embedding a track's own mp3: mean cosine
   **0.991** to its stored vector, matching the ~0.987 `CLAUDE.md` quotes for audio-vs-`.npy`.
-  ⚠️ **Queries are ranked in the RAW space, never whitened** — whitening amplifies the
-  low-variance directions (50x eigenvalue spread, clipped at 1e-4 → up to 100x), so a query's
-  ~1% error lands near-orthogonal: measured raw 0.987–0.994 vs whitened **-0.007–0.264** on
-  the same three tracks. Provider search is also loose (Deezer's top hit for `MFYM` is
-  "50 Cent — Many Men"), so merged results are re-ranked on artist/title overlap.
+  ⚠️ **Queries are ranked in the MEAN-CENTRED space** — not raw, and not whitened. The
+  embeddings are ~97% a shared component (unit-norm vectors with `||mean|| = 0.971`; the
+  content is a residual of norm ~0.23), so **raw cosines are compressed** (mean pairwise
+  cosine 0.943) and a ranking is decided in the fourth decimal, while **whitening** removes
+  the component and amplifies that residual in numerically hopeless directions (eigenvalue
+  spread 4.1e6 with a 1e-4 clip → 100x gain): a query's own track lands at rank 1948–12821.
+  Mean-centring exposes the residual without amplifying it, and measured better —
+  same-artist share of the top 10 **6/10 raw → 8/10 centred**. Corpus views still default to
+  whitened; they are exact by construction and the eval suite measures that space. Provider
+  search is also loose (Deezer's top hit for `MFYM` is "50 Cent — Many Men"), so merged
+  results are re-ranked on artist/title overlap.
 - **Audio comes from MTG, not from previews.** `raw_30s/audio-low` is published as one tar per
   `track_num % 100` bucket; our corpus spans 59 of them and the buckets are a *representative*
   slice (bucket 00's genre shares match the corpus within 1.4 pp). `fetch_mtg_audio.py` pulls what

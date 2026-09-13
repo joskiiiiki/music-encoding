@@ -80,6 +80,14 @@ class Catalog:
         with np.load(self.vectors_path) as z:
             self._spaces = {k: z[k] for k in ("whitened", "raw")}
         self.n, self.dim = self._spaces["whitened"].shape
+        # Mean-centred, derived from raw at startup. Exists because the raw space is
+        # almost entirely a shared component (||mean|| = 0.971, mean pairwise
+        # cosine 0.943), so raw cosines are compressed into 0.94-1.0 and barely
+        # discriminate; subtracting the mean exposes the ~0.23-norm residual where the
+        # content actually lives. It is used for *external queries*, and is deliberately
+        # not offered on the corpus routes -- see app/external.py for the measurements.
+        self.raw_mean = self._spaces["raw"].mean(axis=0)
+        self._spaces["centred"] = self._unit_rows(self._spaces["raw"] - self.raw_mean)
 
         self._load_metadata()
         self._load_audio()
@@ -170,6 +178,11 @@ class Catalog:
             self._playable = {i for i, k in avail.items() if k in ("local", "preview")}
 
     # ------------------------------------------------------------------- lookups
+
+    @staticmethod
+    def _unit_rows(matrix: np.ndarray) -> np.ndarray:
+        norms = np.clip(np.linalg.norm(matrix, axis=1, keepdims=True), 1e-12, None)
+        return (matrix / norms).astype(np.float32)
 
     def space(self, name: str) -> np.ndarray:
         if name not in self._spaces:

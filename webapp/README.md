@@ -187,12 +187,16 @@ audio-vs-`.npy` path. Embedding takes 200-570 ms, so a query is a sub-second rou
 
 Two measured constraints shape it:
 
-* **Ranking is in the raw space, never whitened.** Whitening a *corpus* vector is right --
-  it spreads the cloud -- but whitening a *query* destroys it: ZCA amplifies the
-  low-variance directions (50x eigenvalue spread, clipped at 1e-4, so up to 100x
-  amplification), so a query's own ~1% embedding error lands near-orthogonal. Measured on
-  three tracks ranked against their own corpus embeddings: raw 0.987-0.994, whitened
-  -0.007-0.264.
+* **Ranking is in the mean-centred space** — not raw, and not whitened. The embeddings are
+  dominated by a shared component: every vector is unit-norm and `||mean|| = 0.971`, so
+  97% of each embedding is a direction they all agree on and the content is a residual of
+  norm ~0.23. Raw cosines are therefore compressed (mean pairwise cosine **0.943**) and a
+  ranking is decided in the fourth decimal. Whitening removes the component and then
+  amplifies the residual in directions that are numerically hopeless (eigenvalue spread
+  4.1e6, so the 1e-4 clip means a 100x gain) — a query's own track lands at rank
+  1948–12821. Mean-centring exposes the residual without amplifying it, and won on both
+  tests: same-artist share of the top 10 **6/10 raw → 8/10 centred**, with a score spread
+  of 0.051 instead of 0.008.
 * **Provider search is loose, so results are re-ranked by match quality.** Deezer's top hit
   for `MFYM` is "50 Cent — Many Men (Wish Death)"; iTunes returns the actual Mfym tracks.
   Sorting merged results on artist/title overlap floats the real matches up.

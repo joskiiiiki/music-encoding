@@ -7,17 +7,28 @@ matrix with the same cosine the rest of the app uses.
 
 Two measured decisions
 ----------------------
-**Ranking is in the RAW space.** Whitening a *corpus* embedding is right -- it spreads
-the cloud and the eval suite prefers it -- but whitening a *query* destroys it. ZCA
-amplifies the low-variance directions: the exported covariance has a 50x eigenvalue
-spread and the
-clip at 1e-4 means up to 100x amplification, so the query's own ~1% embedding error is
-magnified into near-orthogonality. Measured on three tracks whose audio we hold, ranked
-against their own corpus embeddings::
+**Ranking is in the MEAN-CENTRED space.** Not whitened, and not raw either -- the three
+were measured against a query whose right answer is known.
 
-    cos(query, corpus embedding)   raw 0.987-0.994   whitened -0.007-0.264
+The embeddings are dominated by a shared component: every vector is unit-norm and
+``||mean|| = 0.971``, so 97% of each embedding is a direction they all agree on and the
+per-track signal is a residual of norm ~0.23. Consequences, measured:
 
-So the raw space is used here regardless of the ``space`` the corpus views default to.
+* **Raw** cosines are compressed into 0.94-1.0 (mean pairwise cosine **0.943**), so a
+  ranking is decided in the fourth decimal. On a Deezer preview of Podington Bear's
+  "Dry Air" the top 10 spanned just 0.008 of cosine.
+* **Whitened** removes that component and then amplifies the residual in directions that
+  are numerically hopeless -- the covariance's eigenvalue spread is 4.1e6, so the 1e-4
+  clip means a 100x gain. A query's own track lands at rank **1948-12821**.
+* **Mean-centred** exposes the residual without amplifying it, and won on both tests:
+  the same-artist share of the top 10 went **6/10 (raw) -> 8/10 (centred)**, with a
+  score spread of 0.051 instead of 0.008 -- scores that actually separate.
+
+For a query whose own track is in the corpus, raw puts it at rank 3/1/1 and centred at
+64/1/1: raw is not useless, it is just compressed. Centred is used because it
+discriminates better and its numbers are readable. This is not a claim about the corpus
+views, which default to whitened and are exact by construction -- the eval suite
+measures that space and prefers it.
 
 **A query is a different recording.** The provider serves a preview, usually the hook,
 a song that may be a remix or a live take; ``compare_songs`` measured ~0.987 between the
@@ -114,12 +125,14 @@ def similar(
         )
 
     query = np.asarray(payload["vector"], dtype=np.float32)
-    norm = float(np.linalg.norm(query)) or 1.0
-    query = query / norm
-
     catalog = get_catalog()
-    # Raw, never whitened -- see the module docstring.
-    sims = catalog.space("raw") @ query
+    # Mean-centred: the query is centred with the same corpus mean the matrix was
+    # centred with, then compared by cosine. See the module docstring for the numbers
+    # behind that choice over raw or whitened.
+    query = query - catalog.raw_mean
+    norm = float(np.linalg.norm(query)) or 1.0
+    query = (query / norm).astype(np.float32)
+    sims = catalog.space("centred") @ query
     k = max(1, min(k, catalog.n - 1))
     top = np.argpartition(-sims, k)[:k]
     top = top[np.argsort(-sims[top])]
@@ -134,7 +147,7 @@ def similar(
             "audio_seconds": payload.get("audio_seconds"),
             "embed_ms": payload.get("elapsed_ms"),
         },
-        "space": "raw",
+        "space": "centred",
         "note": (
             "Embedded from a provider preview — a different recording of the song, so "
             "these neighbours are noisier than the ones a corpus track gets."
