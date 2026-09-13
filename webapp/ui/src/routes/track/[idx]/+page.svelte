@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Footprints from '@lucide/svelte/icons/footprints';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
@@ -165,6 +166,16 @@
 				title={track.audio === 'none' ? 'No audio available for this track' : 'Play'}
 			>
 				{player.track?.idx === track.idx && player.playing ? 'Pause' : 'Play'}
+			</Button>
+			<Button
+				variant="outline"
+				size="lg"
+				disabled={track.audio === 'none'}
+				onclick={() => player.startWalkFrom(track!)}
+				title="Play this track, then keep going to its nearest neighbour, and that one's, endlessly"
+			>
+				<Footprints />
+				walk
 			</Button>
 		</div>
 
