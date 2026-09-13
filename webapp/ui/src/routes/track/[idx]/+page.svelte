@@ -192,13 +192,16 @@
 						<label class="flex items-center gap-2">
 							<span class="text-muted-foreground">neighbours</span>
 							<div class="w-24 shrink-0">
+								<!-- commit, not change: every change refetches the graph over the
+								     network and rewrites the URL, so a drag would fire dozens of
+								     requests. One per release instead. -->
 								<Slider
 									type="single"
 									min={5}
 									max={50}
 									step={1}
 									value={k}
-									onValueChange={(value) => (k = value)}
+									onValueCommit={(value) => (k = value)}
 									aria-label="Number of neighbours"
 								/>
 							</div>
@@ -214,7 +217,7 @@
 									max={0.95}
 									step={0.05}
 									value={minSim}
-									onValueChange={(value) => (minSim = value)}
+									onValueCommit={(value) => (minSim = value)}
 									aria-label="Minimum edge cosine"
 								/>
 							</div>

@@ -56,15 +56,20 @@
 			</div>
 
 			<div class="hidden w-48 sm:block">
-				<!-- Driven one-way from playback position; dragging seeks live, so the thumb
-				     tracks the drag without a second source of truth to keep in sync. -->
+				<!-- `onValueCommit`, deliberately NOT `onValueChange`. bits-ui fires
+				     onValueChange from its internal value setter, and this slider's value is
+				     driven by the playback position -- so position updates, duration
+				     revisions on a VBR file, or the slider's own clamping could all write the
+				     value back and call seek(), which disturbs the audio pipeline and makes
+				     playback stutter. Seeking on release only breaks that loop; the thumb
+				     still tracks the drag because bits-ui updates its own state meanwhile. -->
 				<Slider
 					type="single"
 					min={0}
 					max={Math.max(total, 1)}
 					step={0.1}
 					value={player.currentTime}
-					onValueChange={(value) => player.seek(value)}
+					onValueCommit={(value) => player.seek(value)}
 					aria-label="Seek"
 				/>
 			</div>
