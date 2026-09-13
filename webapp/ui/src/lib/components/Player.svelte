@@ -94,7 +94,7 @@
 {#if player.track}
 	<div class="bg-background/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur">
 
-		<div class="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-2.5">
+		<div class="flex items-center gap-3 px-4 py-2.5">
 			<Button
 				variant="outline"
 				size="icon"
@@ -205,7 +205,7 @@
 		{#if player.walkEnabled}
 			<!-- Below the transport controls, and collapsible: the trail is useful but it is
 			     also a lot of small text to keep on screen the whole time. -->
-			<div class="mx-auto max-w-[1400px] px-4 pb-2">
+			<div class="px-4 pb-2">
 				<div class="flex items-center gap-2">
 					<Button
 						variant="ghost"
