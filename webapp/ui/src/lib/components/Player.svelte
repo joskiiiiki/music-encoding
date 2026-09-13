@@ -144,10 +144,15 @@
 			<div class="hidden w-48 sm:block">
 				<!-- Keyed on the track so each new song gets a fresh slider: without it the
 				     instance keeps the previous track's internal state, and the position read
-				     as "not reset". `onValueChange` only updates the local scrub value (so the
-				     thumb follows a click or drag immediately) -- the actual seek happens on
-				     commit, because seeking on every change fed the audio pipeline a stream of
-				     seeks and made playback stutter. -->
+				     as "not reset".
+
+				     ONLY `onValueCommit` -- deliberately no `onValueChange`. bits-ui calls
+				     onValueChange from inside its internal value setter, so handling it while
+				     this slider's value is *driven* by playback closes a loop: position ->
+				     value prop -> bits-ui's internal write -> onValueChange -> position -> ...,
+				     which spins the main thread and freezes the whole app as soon as a track
+				     plays. `scrub` is therefore only written on commit, which still holds the
+				     thumb where you clicked instead of snapping it back. -->
 				{#key player.track.idx}
 					<Slider
 						type="single"
@@ -155,7 +160,6 @@
 						max={Math.max(total, 1)}
 						step={0.1}
 						value={position}
-						onValueChange={(value) => (scrub = value)}
 						onValueCommit={(value) => {
 							scrub = value;
 							player.seek(value);
