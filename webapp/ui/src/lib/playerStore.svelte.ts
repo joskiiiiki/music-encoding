@@ -52,7 +52,12 @@ class Player {
 		if (!this.#audio) {
 			const audio = new Audio();
 			audio.preload = 'none';
-			audio.addEventListener('timeupdate', () => (this.currentTime = audio.currentTime));
+			// Ignore position updates while a new source is loading: the element can still
+			// emit the *previous* track's position in that window, which showed up as the
+			// slider not resetting when a new track started.
+			audio.addEventListener('timeupdate', () => {
+				if (!this.loading) this.currentTime = audio.currentTime;
+			});
 			audio.addEventListener(
 				'durationchange',
 				() =>

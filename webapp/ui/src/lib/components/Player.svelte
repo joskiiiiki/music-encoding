@@ -15,6 +15,37 @@
 
 	const total = $derived(player.duration || player.track?.duration || 0);
 	const currentStep = $derived(player.trail.length - 1);
+
+	// Where the thumb should sit. The slider is otherwise driven straight from
+	// `player.currentTime`, which only advances on timeupdate (~4x/s) -- so on a click the
+	// thumb jumped to the click point, the next re-render yanked it back to the stale
+	// playback position until the seek landed, and it read as "snaps back". Holding the
+	// scrubbed value until playback catches up fixes that, and it has to be released or
+	// the next track inherits it.
+	let scrub = $state<number | null>(null);
+	const position = $derived(scrub ?? player.currentTime);
+
+	// A new track starts at 0: never carry a scrub across it.
+	$effect(() => {
+		void player.track?.idx;
+		scrub = null;
+	});
+
+	$effect(() => {
+		if (scrub === null) return;
+		const target = scrub;
+		// Seek landed: playback has reached where the user put the thumb.
+		if (Math.abs(player.currentTime - target) < 0.5) {
+			scrub = null;
+			return;
+		}
+		// ...but never let it stick if the seek is refused (or the file is shorter than
+		// the requested position), which would freeze the position display.
+		const timer = setTimeout(() => {
+			if (scrub === target) scrub = null;
+		}, 1500);
+		return () => clearTimeout(timer);
+	});
 </script>
 
 {#if player.track}
@@ -111,22 +142,27 @@
 			</div>
 
 			<div class="hidden w-48 sm:block">
-				<!-- `onValueCommit`, deliberately NOT `onValueChange`. bits-ui fires
-				     onValueChange from its internal value setter, and this slider's value is
-				     driven by the playback position -- so position updates, duration
-				     revisions on a VBR file, or the slider's own clamping could all write the
-				     value back and call seek(), which disturbs the audio pipeline and makes
-				     playback stutter. Seeking on release only breaks that loop; the thumb
-				     still tracks the drag because bits-ui updates its own state meanwhile. -->
-				<Slider
-					type="single"
-					min={0}
-					max={Math.max(total, 1)}
-					step={0.1}
-					value={player.currentTime}
-					onValueCommit={(value) => player.seek(value)}
-					aria-label="Seek"
-				/>
+				<!-- Keyed on the track so each new song gets a fresh slider: without it the
+				     instance keeps the previous track's internal state, and the position read
+				     as "not reset". `onValueChange` only updates the local scrub value (so the
+				     thumb follows a click or drag immediately) -- the actual seek happens on
+				     commit, because seeking on every change fed the audio pipeline a stream of
+				     seeks and made playback stutter. -->
+				{#key player.track.idx}
+					<Slider
+						type="single"
+						min={0}
+						max={Math.max(total, 1)}
+						step={0.1}
+						value={position}
+						onValueChange={(value) => (scrub = value)}
+						onValueCommit={(value) => {
+							scrub = value;
+							player.seek(value);
+						}}
+						aria-label="Seek"
+					/>
+				{/key}
 			</div>
 			<span class="text-muted-foreground shrink-0 text-xs tabular-nums">
 				{formatDuration(player.currentTime)} / {formatDuration(total)}
