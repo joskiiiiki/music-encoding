@@ -82,6 +82,16 @@ Time stability comes from pairing two different windows of the *same* track as p
 
 ## Training
 
+> ⚠️ **`~/mtg_jamendo` was deleted on 2026-09-13** to free disk for the web app's audio
+> download (135 GB; the disk was at 99%). It was the precomputed-mel corpus that
+> `setup_local_train.sh` and every `--mel-root` path below read, so **mel-mode training and
+> `build_chroma --mel-root` do not work until it is re-downloaded** (MTG's
+> `raw_30s/melspecs`, 229 GB). The audio fetched into `~/mtg` does **not** substitute: mel
+> mode uses MTG's front end (96 mel @ 24 kHz, `norm='slaney'`), while the waveform path in
+> `twin_dataset.py` computes 64 mel @ 22.05 kHz, so regenerating the corpus from audio gives
+> ~0.987 cosine to the originals, not a bit-identical corpus. In exchange, the web app has
+> exact audio for ~98% of the corpus instead of fuzzy-matched third-party previews.
+
 ```bash
 # from repo root, inside the nix dev shell (direnv loads it)
 python -m music_encoding.train --mtg-data <data> --audio-root <audio> -e 300
@@ -90,8 +100,10 @@ python -m music_encoding.train -r checkpoints/checkpoint_e99.pt --mtg-data <data
 
 Uses CUDA/ROCm (autocast default bf16; `setup_local_train.sh` uses **fp16** + batch **256** on the local RDNA card — see the `--autocast` note under `train.py`). Data is the official **MTG-Jamendo** dataset — see below.
 
-**Precomputed-mel mode (no decode, no conversion).** The dataset can instead be
-the official MTG-Jamendo log-mel `.npy` download (`~/mtg_jamendo/`,
+**Precomputed-mel mode (no decode, no conversion).** ⚠️ **The `.npy` corpus this section
+describes was deleted on 2026-09-13 — see the warning at the top of `## Training`; the
+paths below are what it *was*, and the mode needs a re-download to run again.** The
+dataset can instead be the official MTG-Jamendo log-mel `.npy` download (`~/mtg_jamendo/`,
 `<id % 100:02d>/<id>.npy`, 32,783 × `(96, T)` float32 @ 46.875 fps). Pass
 `--mel-root` in place of `--mtg-data`/`--audio-root` and the pipeline skips audio
 decode + `LogMelSpectrogram` entirely — all augmentation happens on the

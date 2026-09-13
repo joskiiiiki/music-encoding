@@ -44,10 +44,12 @@ new checkpoint; the audio cache lives in a **separate** `audio.sqlite` so a re-e
 never wipe a long download or warm run.
 
 `fetch_mtg_audio.py` pulls MTG's own archives (~1.7 GB each, sha256-verified against MTG's
-published list, resumable) and **stops before it fills the disk** — the full corpus is 98.5 GB
-and this box has far less free than that, so it fetches what fits. Re-run it any time to
-continue; `local_audio_index.py` is idempotent, so fetch-then-index can be repeated as space
-appears.
+published list, resumable via `curl -C -`) and **stops before it fills the disk** — the full
+corpus is 98.5 GB across the 59 buckets, so on a tight disk it fetches what fits and can be
+re-run later to continue. `local_audio_index.py` is idempotent, so fetch-then-index can be
+repeated as space appears. (The mel-spectrogram corpus `~/mtg_jamendo`, 135 GB, was deleted on
+2026-09-13 to make room for this; see the warning in `CLAUDE.md` — that is the training input,
+so `--mel-root` paths need a re-download.)
 
 ## Running
 
