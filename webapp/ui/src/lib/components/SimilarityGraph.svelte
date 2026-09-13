@@ -86,7 +86,10 @@
 			const angle = spread * Math.PI * 2;
 			return {
 				...node,
-				radius: 5 + Math.min(9, Math.sqrt(degree) * 2.4),
+				// Small dots: structure and labels should carry the picture, not blobs.
+				// Was 5 + min(9, ...) = 5..14; now roughly 1.8..4.5 (about a third of the
+				// radius, a tenth of the area).
+				radius: 1.8 + Math.min(2.7, Math.sqrt(degree) * 0.7),
 				color: color(labelOf(node)),
 				label: labelOf(node),
 				x: index === 0 ? 0 : Math.cos(angle) * radius,
@@ -157,7 +160,7 @@
 			if (node.seed) {
 				// The seed is the thing you navigate by, so it gets a ring rather than
 				// just being another dot.
-				ctx.lineWidth = 2.5 / transform.k;
+				ctx.lineWidth = 1.5 / transform.k;
 				ctx.strokeStyle = theme.ring;
 				ctx.stroke();
 			}
@@ -198,10 +201,15 @@
 					.distance((link) => 30 + 190 * (1 - link.weight))
 			)
 			.force('charge', forceManyBody<Node>().strength(-190))
-			.force('collide', forceCollide<Node>().radius((node) => node.radius + 7))
+			.force('collide', forceCollide<Node>().radius((node) => node.radius + 3))
 			.force('center', forceCenter(0, 0))
 			.on('tick', draw);
 		simulation.tick(120);
+		// Stop after settling. Without this the simulation's own timer keeps ticking (and
+		// redrawing) for a couple of seconds after the layout is already settled, and any
+		// stray alphaTarget left by a drag that ended off-canvas keeps it hot forever --
+		// which reads as the dots twitching.
+		simulation.stop();
 		draw();
 	}
 
@@ -258,9 +266,15 @@
 		};
 		media.addEventListener('change', onTheme);
 
+		// A drag released outside the canvas never fires the drag behaviour's `end`, which
+		// would leave alphaTarget at 0.25 and the simulation heating forever.
+		const releaseDrag = () => simulation?.alphaTarget(0);
+		window.addEventListener('pointerup', releaseDrag);
+
 		return () => {
 			observer.disconnect();
 			media.removeEventListener('change', onTheme);
+			window.removeEventListener('pointerup', releaseDrag);
 			simulation?.stop();
 		};
 	});
@@ -277,7 +291,12 @@
 		const x = toLocalX(screenX);
 		const y = toLocalY(screenY);
 		return (
-			nodes.find((node) => Math.hypot(node.x! - x, node.y! - y) <= node.radius + 4) ?? null
+			// Generous minimum hit radius: the dots are small now, but they still have to be
+			// easy to hover and to click to recentre.
+			nodes.find(
+				(node) =>
+					Math.hypot(node.x! - x, node.y! - y) <= Math.max(node.radius + 4, 8)
+			) ?? null
 		);
 	}
 
@@ -290,12 +309,24 @@
 		canvas.style.height = `${height}px`;
 	}
 
+	// Rebuild only when the graph or a display parameter actually changes. Keyed on a
+	// signature rather than on the `graph` object's identity: restart() re-seeds every
+	// node onto the starting circle, so letting it run on an unrelated re-render makes the
+	// whole layout jump.
+	let lastSignature = '';
 	$effect(() => {
-		// Rebuild whenever the graph or the display parameters change.
-		void graph;
-		void minSim;
-		void colorBy;
+		const signature = `${graph.seed}|${graph.nodes.length}|${graph.edges.length}|${minSim}|${colorBy}`;
+		if (signature === lastSignature) return;
+		lastSignature = signature;
 		restart();
+	});
+
+	$effect(() => {
+		// Redraw when the hovered node changes. The canvas is otherwise only painted on a
+		// simulation tick, and the simulation now stops once settled -- so without this the
+		// hover highlight would never appear.
+		void hovered;
+		draw();
 	});
 </script>
 

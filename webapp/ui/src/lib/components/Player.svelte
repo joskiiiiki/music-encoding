@@ -5,6 +5,8 @@
 	import X from '@lucide/svelte/icons/x';
 	import Footprints from '@lucide/svelte/icons/footprints';
 	import SkipForward from '@lucide/svelte/icons/skip-forward';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { formatDuration } from '$lib/api';
 	import { player } from '$lib/playerStore.svelte.js';
 	import AudioBadge from './AudioBadge.svelte';
@@ -46,59 +48,12 @@
 		}, 1500);
 		return () => clearTimeout(timer);
 	});
+
+	let trailCollapsed = $state(false);
 </script>
 
 {#if player.track}
 	<div class="bg-background/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur">
-		{#if player.walkEnabled}
-			<div class="mx-auto max-w-[1400px] px-4 pt-2">
-				<div class="flex items-center gap-3">
-					<span class="text-muted-foreground shrink-0 text-[10px] tracking-wide uppercase">
-						walk
-					</span>
-					<div class="flex shrink-0 items-center gap-1.5">
-						<Checkbox id="walk-new-artist" bind:checked={player.avoidSameArtist} />
-						<label for="walk-new-artist" class="cursor-pointer text-[10px]">new artist</label>
-					</div>
-
-					<!-- The chain, oldest first. Each chip is the hop that led to that track, so
-					     the numbers show how similarity decays as the walk drifts; clicking one
-					     rewinds the walk to that point. -->
-					<ScrollArea class="min-w-0 flex-1" orientation="horizontal">
-						<div class="flex items-center gap-1 pr-3">
-							{#each player.trail as step, index (step.idx)}
-								{#if index > 0}
-									<span class="text-muted-foreground shrink-0 text-[10px]">→</span>
-								{/if}
-								<button
-									type="button"
-									class="hover:bg-accent flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] {index ===
-									currentStep
-										? 'bg-accent text-accent-foreground'
-										: 'text-muted-foreground'}"
-									title={step.artist}
-									onclick={() => player.jumpTo(index)}
-								>
-									<span class="max-w-[130px] truncate">{step.title}</span>
-									{#if step.cos !== null}
-										<span class="tabular-nums opacity-60">{step.cos.toFixed(2)}</span>
-									{/if}
-								</button>
-							{/each}
-							{#if player.nextUp}
-								<span class="text-muted-foreground shrink-0 text-[10px]">→</span>
-								<span class="text-muted-foreground shrink-0 px-1.5 text-[10px] italic" title="lined up next">
-									{player.nextUp.title.slice(0, 26)}
-									{#if player.nextUp.score !== null}
-										<span class="tabular-nums">{player.nextUp.score.toFixed(2)}</span>
-									{/if}
-								</span>
-							{/if}
-						</div>
-					</ScrollArea>
-				</div>
-			</div>
-		{/if}
 
 		<div class="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-2.5">
 			<Button
@@ -207,6 +162,87 @@
 				<X />
 			</Button>
 		</div>
+
+		{#if player.walkEnabled}
+			<!-- Below the transport controls, and collapsible: the trail is useful but it is
+			     also a lot of small text to keep on screen the whole time. -->
+			<div class="mx-auto max-w-[1400px] px-4 pb-2">
+				<div class="flex items-center gap-2">
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						class="text-muted-foreground shrink-0"
+						onclick={() => (trailCollapsed = !trailCollapsed)}
+						aria-expanded={!trailCollapsed}
+						title={trailCollapsed ? 'Show the walk trail' : 'Hide the walk trail'}
+					>
+						{#if trailCollapsed}
+							<ChevronUp />
+						{:else}
+							<ChevronDown />
+						{/if}
+					</Button>
+					<span class="text-muted-foreground shrink-0 text-[10px] tracking-wide uppercase">
+						walk
+					</span>
+					<span class="text-muted-foreground shrink-0 text-[10px] tabular-nums">
+						{currentStep + 1}/{player.trail.length}
+					</span>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<Checkbox id="walk-new-artist" bind:checked={player.avoidSameArtist} />
+						<label for="walk-new-artist" class="cursor-pointer text-[10px]">new artist</label>
+					</div>
+
+					{#if !trailCollapsed}
+						<!-- The chain, oldest first. Each chip is the hop that led to that track, so
+						     the numbers show how similarity decays as the walk drifts; clicking one
+						     rewinds the walk to that point.
+
+						     The explicit height is load-bearing: the scrollbar is drawn over the
+						     bottom of the viewport, and the root otherwise sizes itself to the chips,
+						     leaving zero clearance so the bar lands on the text. 26px holds an 18px
+						     chip row plus a strip for the bar; `items-start` keeps the chips at the
+						     top of that strip. -->
+						<ScrollArea class="h-[26px] min-w-0 flex-1" orientation="horizontal">
+							<div class="flex items-start gap-1 pr-3">
+								{#each player.trail as step, index (step.idx)}
+									{#if index > 0}
+										<span class="text-muted-foreground shrink-0 text-[10px]">→</span>
+									{/if}
+									<button
+										type="button"
+										class="hover:bg-accent flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] {index ===
+										currentStep
+											? 'bg-accent text-accent-foreground'
+											: 'text-muted-foreground'}"
+										title={step.artist}
+										onclick={() => player.jumpTo(index)}
+									>
+										<span class="max-w-[130px] truncate">{step.title}</span>
+										{#if step.cos !== null}
+											<span class="tabular-nums opacity-60">{step.cos.toFixed(2)}</span>
+										{/if}
+									</button>
+								{/each}
+								{#if player.nextUp}
+									<span class="text-muted-foreground shrink-0 text-[10px]">→</span>
+									<span
+										class="text-muted-foreground shrink-0 px-1.5 text-[10px] italic"
+										title="lined up next"
+									>
+										{player.nextUp.title.slice(0, 26)}
+										{#if player.nextUp.score !== null}
+											<span class="tabular-nums">{player.nextUp.score.toFixed(2)}</span>
+										{/if}
+									</span>
+								{/if}
+							</div>
+						</ScrollArea>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
 		{#if player.error}
 			<p class="text-destructive mx-auto max-w-[1400px] px-4 pb-2 text-xs">{player.error}</p>
 		{/if}
